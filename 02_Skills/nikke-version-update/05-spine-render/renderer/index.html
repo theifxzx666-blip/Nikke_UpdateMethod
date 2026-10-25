@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>NIKKE 大厅 Spine</title>
+<style>
+  html,body{margin:0;height:100%;background:#0e1116;overflow:hidden}
+  #wrap{position:absolute;inset:0;display:grid;place-items:center}
+  #c{display:block;image-rendering:auto}
+  #hud{position:fixed;left:12px;top:10px;color:#8b97a8;
+       font:12px/1.7 ui-monospace,Menlo,Consolas,monospace;white-space:pre;pointer-events:none}
+</style>
+<script type="importmap">
+{ "imports": {
+  "@esotericsoftware/spine-core": "./vendor/spine-core/index.js",
+  "@esotericsoftware/spine-webgl": "./vendor/spine-webgl/index.js"
+} }
+</script>
+</head>
+<body>
+<div id="wrap"><canvas id="c"></canvas></div>
+<div id="hud">加载中…</div>
+
+<script type="module">
+import {
+  AtlasAttachmentLoader, SkeletonBinary, AnimationState,
+  AnimationStateData, Skeleton, Vector2
+} from '@esotericsoftware/spine-core';
+import { SceneRenderer, AssetManager } from '@esotericsoftware/spine-webgl';
+
+const P = new URLSearchParams(location.search);
+const asset = P.get('asset') || 'assets/c870_00/c870_00';
+const BG = P.get('bg') === 'light' ? [1, 1, 1] : [0.055, 0.067, 0.086];
+const ALPHA = 1;
+const SS = Math.max(1, parseInt(P.get('ss') || '2', 10));   // 超采样倍数
+const FIT = P.get('fit');        // 只用第几层取景（多层时用，null = 全部层并集）
+/* fitq: 取景用「分位」而不是全并集。0.9 = 丢掉最极端的上下各 5% 帧。
+   爆裂演出的特效层常常飞到画面外几十倍远，全并集会把角色缩成一个小点。 */
+const FITQ = P.get('fitq');
+/* hide: 只参与取景、不参与绘制 的层序号（逗号分隔）。
+   c870 的 skillcut 两条里含「卡面从极远处飞入」的关键帧，自身包围盒算出来
+   11879×15102，拿它取景主体只占一成；而同一骨架的 idle（壁纸那条）包围盒
+   是 4500×4381，正好是卡面本身。所以把 idle 当「取景参照」挂进 layers、
+   用 hide=0 让它不画出来 —— 构图立刻回到卡面大小，且不污染画面。 */
+const HIDE = new Set((P.get('hide') || '').split(',')
+  .map(s => s.trim()).filter(s => s !== '').map(Number));
+
+const canvas = document.getElementById('c');
+const hud = document.getElementById('hud');
+const gl = canvas.getContext('webgl', {
+  alpha: true, premultipliedAlpha: true, preserveDrawingBuffer: true, antialias: true,
+});
+
+const renderer = new SceneRenderer(canvas, gl);
+/* layers: 同一个骨架的多个实例，各播一条动画后依次叠加绘制。
+   爆裂特写就是这种结构 —— 一个 skel 里既有角色的 skillcut，又有背景板 / 特效层，
+   Timeline 用两条 Spine 轨道同时驱动两个 SkeletonAnimation 实例；
+   单播一条只能画出局部（c872 的 skillcut_1 只有头+双手、bg_skillcut_1 是空画面）。
+   默认只有一层，大厅站立 / BOSS 的用法完全不变。 */
+const state = { ready: false, anims: [], layers: [], skeleton: null, animState: null, clip: null };
+let bounds = null;          // 整段动画的并集包围盒（世界坐标）
+
+function setCanvas(cssW, cssH) {
+  canvas.width = Math.round(cssW * SS);
+  canvas.height = Math.round(cssH * SS);
+  canvas.style.width = cssW + 'px';
+  canvas.style.height = cssH + 'px';
+  gl.viewport(0, 0, canvas.width, canvas.height);
+}
+
+function fitCamera(b) {
+  const cam = renderer.camera;
+  const pad = 0.03;
+  const w = Math.max(b.w * (1 + pad * 2), 1e-3);
+  const h = Math.max(b.h * (1 + pad * 2), 1e-3);
+  const aspect = canvas.width / canvas.height;
+  // 让包围盒完整落在画面里
+  let vw = w, vh = h;
+  if (w / h > aspect) vh = w / aspect; else vw = h * aspect;
+  cam.position.x = b.cx;
+  cam.position.y = b.cy;
+  cam.viewportWidth = vw;
+  cam.viewportHeight = vh;
+  cam.update();
+}
+
+function draw() {
+  gl.clearColor(BG[0], BG[1], BG[2], ALPHA);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  renderer.begin();
+  // 按 layers 顺序画：先背景层、后前景层（顺序由 ?layers= 的书写顺序决定）
+  // ?hide= 里的层只推进动画、不画（纯取景参照）
+  state.layers.forEach((L, i) => {
+    if (!HIDE.has(i)) renderer.drawSkeleton(L.sk, true);   // atlas 里 pma:true
+  });
+  renderer.end();
+}
+
+/* 逐帧采样包围盒，取并集 —— 逐帧自适应会让画面「呼吸」。
+   ?fit=<层序号> 可以指定「只用某一层取景」：
+   背景层常常铺满整个画面、或者坐标飞到几千之外，混进来一起取并集，
+   主体就会被缩成一个点（c870 的远景层就是这样，战败动画那轮也踩过同款坑）。 */
+function measure(fps = 15) {
+  const off = new Vector2(), size = new Vector2(), tmp = [];
+  const X0 = [], Y0 = [], X1 = [], Y1 = [];
+  let n0 = 0;
+  const fitIdx = FIT === null ? null : parseInt(FIT, 10);
+  const use = (fitIdx !== null && state.layers[fitIdx])
+    ? new Set([state.layers[fitIdx]]) : null;
+  for (const L of state.layers) {
+    const sk = L.sk, st = L.st, clip = L.clip;
+    const n = Math.max(8, Math.round(clip.duration * fps));
+    n0 = Math.max(n0, n);
+    const take = !use || use.has(L);
+    st.clearTracks();
+    for (let i = 0; i < n; i++) {
+      const t = (i / n) * clip.duration;
+      st.clearTracks();
+      st.setAnimation(0, clip.name, false);
+      st.update(t);
+      st.apply(sk);
+      sk.updateWorldTransform();
+      sk.getBounds(off, size, tmp);
+      if (!isFinite(off.x) || size.x <= 0) continue;
+      if (take) {
+        X0.push(off.x); Y0.push(off.y);
+        X1.push(off.x + size.x); Y1.push(off.y + size.y);
+      }
+    }
+    // 复位到 loop 起点
+    st.clearTracks();
+    st.setAnimation(0, clip.name, true);
+    st.update(0);
+    st.apply(sk);
+    sk.updateWorldTransform();
+  }
+
+  if (!X0.length) {
+    const d = state.layers[0] && state.layers[0].sk.data;
+    return { cx: 0, cy: 0, w: (d && d.width) || 512, h: (d && d.height) || 512 };
+  }
+  let x0, y0, x1, y1;
+  const q = FITQ ? Math.min(1, Math.max(0.5, parseFloat(FITQ))) : 1;
+  if (q >= 0.999) {
+    x0 = Math.min(...X0); y0 = Math.min(...Y0);
+    x1 = Math.max(...X1); y1 = Math.max(...Y1);
+  } else {
+    // 低界取 (1-q)/2 分位、高界取 1-(1-q)/2 分位：丢掉两端最极端的帧
+    const lo = (1 - q) / 2, hi = 1 - lo;
+    const at = (arr, p) => {
+      arr.sort((a, b) => a - b);
+      const i = Math.min(arr.length - 1, Math.max(0, Math.round(p * (arr.length - 1))));
+      return arr[i];
+    };
+    x0 = at(X0, lo); y0 = at(Y0, lo);
+    x1 = at(X1, hi); y1 = at(Y1, hi);
+    if (!(x1 > x0) || !(y1 > y0)) {      // 分位退化时回落到全并集
+      x0 = Math.min(...X0); y0 = Math.min(...Y0);
+      x1 = Math.max(...X1); y1 = Math.max(...Y1);
+    }
+  }
+  return { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, w: x1 - x0, h: y1 - y0, frames: n0, q };
+}
+
+const SEEK_STEP = 1 / 60;
+
+/* 用固定步长把动画从 0 推到 t，模拟真实播放。
+   直接 st.update(t) 一次跳到位会跳过中间帧，某些轨道的 mix 结果与逐帧播放不一致。 */
+function advance(st, to) {
+  let acc = 0;
+  if (to <= 1e-9) {
+    /* t=0 也要推一步。刚 setAnimation 完还没 update 过，动画没落到骨架上，
+       apply 出来的是 setup pose —— 而 NIKKE 的爆裂骨架 setup 是全隐藏，
+       渲出来就是一张纯黑图（爆裂导出第一帧就踩过这个）。 */
+    st.update(1e-6);
+    return;
+  }
+  while (acc < to - 1e-9) {
+    const d = Math.min(SEEK_STEP, to - acc);
+    st.update(d);
+    acc += d;
+  }
+}
+
+function seek(t) {
+  for (const L of state.layers) {
+    const st = L.st, sk = L.sk;
+    st.clearTracks();
+    /* 每帧都先回到 setup pose。不重置的话，上一帧里被动画置零/隐藏的槽位
+       可能残留，逐帧连拍时偶发整帧渲染不出来（c871 出现过 3 帧纯黑）。 */
+    sk.setToSetupPose();
+    st.setAnimation(0, L.clip.name, false);
+    advance(st, t);
+    st.apply(sk);
+    sk.updateWorldTransform();
+  }
+  // 明确绘制一次，保证 preserveDrawingBuffer 里就是这一帧
+  draw();
+}
+
+async function boot() {
+  const mgr = new AssetManager(gl);
+  const pngUrl = P.get('png');
+  if (pngUrl) {
+    mgr.loadTextureAtlas(asset + '.atlas', undefined, undefined,
+      { [asset.split('/').pop() + '.png']: pngUrl });
+  } else {
+    mgr.loadTextureAtlas(asset + '.atlas');
+  }
+  mgr.loadBinary(asset + '.skel');
+  await mgr.loadAll();
+
+  const atlas = mgr.require(asset + '.atlas');
+  const loader = new AtlasAttachmentLoader(atlas);
+  const bin = new SkeletonBinary(loader);
+  const data = bin.readSkeletonData(mgr.require(asset + '.skel'));
+
+  const sd = new AnimationStateData(data);
+  sd.defaultMix = 0.2;
+
+  state.anims = data.animations.map(a => ({ name: a.name, duration: +a.duration.toFixed(3) }));
+
+  // 默认动画：优先 idle / lobby，其次最长的一条
+  const want = P.get('anim');
+  let pick = data.animations.find(a => want && a.name.toLowerCase() === want.toLowerCase())
+    || data.animations.find(a => /idle/i.test(a.name))
+    || data.animations.find(a => /lobby|stand/i.test(a.name))
+    || data.animations.slice().sort((a, b) => b.duration - a.duration)[0];
+
+  /* ?layers=a,b,c —— 同一骨架的多个实例，依次叠加绘制（先写的画在下面）。
+     每个实例都要独立的 Skeleton + AnimationState，共用一份 data 即可。 */
+  const wantLayers = (P.get('layers') || '').split(',')
+    .map(s => s.trim()).filter(Boolean);
+  let picks;
+  const missing = [];
+  if (wantLayers.length) {
+    picks = [];
+    for (const nm of wantLayers) {
+      const a = data.animations.find(x => x.name === nm);
+      if (a) picks.push(a); else missing.push(nm);
+    }
+  }
+  if (!picks || !picks.length) picks = [pick];
+
+  state.layers = picks.map(clip => {
+    const sk = new Skeleton(data);
+    sk.setToSetupPose();
+    return { sk, st: new AnimationState(sd), clip };
+  });
+  state.skeleton = state.layers[0].sk;
+  state.animState = state.layers[0].st;
+  state.clip = state.layers[0].clip;
+
+  setCanvas(600, 900);
+  bounds = measure(12);
+  fitCamera(bounds);
+
+  for (const L of state.layers) {
+    L.st.clearTracks();
+    L.st.setAnimation(0, L.clip.name, true);
+    L.st.update(0);
+    L.st.apply(L.sk);
+    L.sk.updateWorldTransform();
+  }
+  draw();
+  if (missing.length) console.warn('layers 里这些动画不存在：', missing.join(', '));
+
+  state.ready = true;
+  if (P.get('ui') === '0') hud.style.display = 'none';
+  hud.textContent =
+    `资产 ${asset}\n` +
+    `尺寸 ${data.width.toFixed(1)}×${data.height.toFixed(1)}  scale=${data.scale}\n` +
+    `动画 ${data.animations.length} 条：\n` +
+    data.animations.map(a => `  ${a.name}  ${a.duration.toFixed(2)}s`).join('\n');
+
+  window.__spine.ready = true;
+}
+
+window.__spine = {
+  ready: false,
+  info: () => ({
+    ready: state.ready,
+    animations: state.anims,
+    current: state.clip ? { name: state.clip.name, duration: state.clip.duration } : null,
+    width: state.skeleton?.data.width,
+    height: state.skeleton?.data.height,
+    bounds,
+    canvas: { w: canvas.width, h: canvas.height },
+  }),
+  // keepCam=true 时不重新测包围盒、不重设相机 —— 用于「同一套资源里换动画但保持构图」
+  setAnim(name, keepCam = false) {
+    const a = state.skeleton.data.animations.find(x => x.name === name);
+    if (!a) return false;
+    state.layers[0].clip = a;              // 只换第一层，其余层保持
+    state.clip = a;
+    if (!keepCam) {
+      bounds = measure(12);
+      fitCamera(bounds);
+    }
+    seek(0);
+    return true;
+  },
+  /* 整组换层：setLayers(['bg','fg']) —— 先写的画在下面（背景在前） */
+  setLayers(names, keepCam = false) {
+    const ok = [];
+    for (const nm of names) {
+      const a = state.skeleton.data.animations.find(x => x.name === nm);
+      if (a) ok.push(a);
+    }
+    if (!ok.length) return false;
+    const sd = new AnimationStateData(state.skeleton.data);
+    sd.defaultMix = 0.2;
+    state.layers = ok.map(clip => {
+      const sk = new Skeleton(state.skeleton.data);
+      sk.setToSetupPose();
+      return { sk, st: new AnimationState(sd), clip };
+    });
+    state.skeleton = state.layers[0].sk;
+    state.animState = state.layers[0].st;
+    state.clip = state.layers[0].clip;
+    if (!keepCam) {
+      bounds = measure(12);
+      fitCamera(bounds);
+    }
+    seek(0);
+    return ok.map(a => a.name);
+  },
+  layers() { return state.layers.map(L => L.clip.name); },
+  bounds() { return bounds; },
+  // 设定输出画布（CSS 尺寸 × SS 得到实际像素）
+  resize(cssW, cssH) { setCanvas(cssW, cssH); if (bounds) fitCamera(bounds); draw(); return [canvas.width, canvas.height]; },
+  measure(fps = 15) { bounds = measure(fps); fitCamera(bounds); return bounds; },
+  seek(t) { seek(t); return true; },
+  capture() { draw(); return canvas.toDataURL('image/png'); },
+  aspect() { return bounds ? bounds.w / bounds.h : 1; },
+};
+
+boot().catch(e => {
+  hud.textContent = '加载失败：' + e;
+  window.__spine.error = String(e);
+  console.error(e);
+});
+</script>
+</body>
+</html>
