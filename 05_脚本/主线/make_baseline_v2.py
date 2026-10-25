@@ -42,12 +42,15 @@ DEFAULT_OUT = PACK_ROOT / "_基线_20261029"
 # 静态表导出器（C#/MemoryPack，见 build_static 的说明）
 MPDUMP = Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\02_Skills\mpdump\bin\Release\net8.0\mpdump.exe")
 
-# 10 张判据表（10-29 判「框/称号/皮肤/卡池/通行证/活动」的第一判据）
+# 11 张判据表（10-29 判「框/称号/皮肤/卡池/通行证/活动」的第一判据）
+# ProfileCardObjectTable 是「个人主页」的物件总表（背景/贴纸/称号 badge 三类），
+# 只有它能回答「本期新增了哪些个人主页装饰」，UserTitleTable 只覆盖称号文字本体。
 STATIC_TABLES = [
     "CharacterCostumeTable",
     "UserFrameTable",
     "UserTitleTable",
     "UserTitleAssemblyTable",
+    "ProfileCardObjectTable",
     "PassManagerTable",
     "EventManagerTable",
     "TrailMarkerEventTable",
@@ -351,20 +354,43 @@ def build_names(out: Path, log: list) -> dict:
         log.append(f"  头像框.json             {len(rows):,} 行 / "
                    f"{res['frame_resources']:,} 个 ResourceId")
 
-    for table, tag in (("UserTitleTable", "称号"), ("UserTitleAssemblyTable", "称号装配")):
+    for table, tag, icon_f, name_f in (
+            ("UserTitleTable", "称号", "IconResourceId", "NameLocaleKey"),
+            ("UserTitleAssemblyTable", "称号装配", "IconId", "TitleLocaleKey")):
         rows = _load_table(out, table)
         if rows is None:
             continue
+        # 字段名两表不同：UserTitleTable 用 IconResourceId/NameLocaleKey，
+        # 装配表用 IconId/TitleLocaleKey。旧版统一取 IconResource/TitleLocaleKey，
+        # 结果 250 行全 None，等于没存名字（2026-10-26 修）。
         slim = [{"Id": r.get("Id"),
-                 "IconResource": r.get("IconResource") or r.get("IconId") or r.get("IconReso"),
-                 "LocaleKey": r.get("TitleLocaleKey")} for r in rows]
+                 "IconResource": r.get(icon_f) or "",
+                 "LocaleKey": r.get(name_f) or ""} for r in rows]
         codes = sorted({str(s["IconResource"]) for s in slim if s["IconResource"]})
+        missing = sum(1 for s in slim if not s["LocaleKey"])
+        if missing:
+            log.append(f"  !! {tag}.json 有 {missing} 行没有 LocaleKey —— 字段名可能又变了")
         (dst / f"{tag}.json").write_text(
             json.dumps({"table": table, "count": len(slim), "icon_codes": len(codes),
                         "codes": codes, "rows": slim}, ensure_ascii=False, indent=1),
             encoding="utf-8")
         res[tag] = {"rows": len(slim), "codes": len(codes)}
         log.append(f"  {tag}.json{'':<10} {len(slim):,} 行 / {len(codes):,} 个图标代号")
+
+    # 个人主页物件（背景 / 贴纸 / 称号 badge）——判「本期新增装饰」的唯一总表
+    pc = _load_table(out, "ProfileCardObjectTable")
+    if pc is not None:
+        rows = [{"Id": r.get("Id"), "Type": r.get("ObjectType"), "Sub": r.get("ObjectSubType"),
+                 "Grade": r.get("GradeType"), "ResourceId": r.get("ResourceId") or "",
+                 "LocaleKey": r.get("NameLocalkey") or ""} for r in pc]
+        (dst / "个人主页.json").write_text(
+            json.dumps({"table": "ProfileCardObjectTable", "count": len(rows),
+                        "by_type": {f"{t}-{s}": sum(1 for r in rows if r["Type"] == t and r["Sub"] == s)
+                                    for t, s in sorted({(r["Type"], r["Sub"]) for r in rows})},
+                        "rows": rows}, ensure_ascii=False, indent=1),
+            encoding="utf-8")
+        res["个人主页"] = len(rows)
+        log.append(f"  个人主页.json           {len(rows):,} 行（背景/贴纸/称号三类）")
 
     return res
 
