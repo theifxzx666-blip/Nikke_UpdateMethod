@@ -135,5 +135,5 @@ lo_al = lo // 4096 * 4096
 ## 关联
 
 - 键 → 包名的对应规律 → `01-baseline-diff/reference/键族表.md`
-- 解包后的处理 → Skill `03-static-tables` / `04-text-locale` / `05-spine-render`
+- 解包后的处理 → Skill `04-static-tables` / `05-text-locale` / `06-spine-render`
 - 环境常量 → `00_规范/技术选型.md` 第零节
