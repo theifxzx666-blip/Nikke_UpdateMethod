@@ -17,9 +17,9 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-SD = Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\02_Skills\mpdump\out")
+SD = Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\02_Skills\mpdump\out")
 LSC = Path(r"D:\Codex\临时\nikke_intl_20261029\device\lsc")
-OUT = Path(r"D:\Codex\Nikke\Nikke_Skills\版本更新\03_历史\20260813_国际服"
+OUT = Path(r"D:\Codex\Nikke\02_工位\10_数据管线\版本更新\03_历史\20260813_国际服"
            r"\05_主线_47-48章")
 
 MOD = {0: "普通", 1: "困难", 2: "剧情"}

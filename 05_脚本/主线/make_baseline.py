@@ -6,7 +6,7 @@ import sqlite3
 from pathlib import Path
 
 SRC = Path(r"D:\Codex\临时\nikke_intl_20261029\device")
-OUT = Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\00_资源库\版本节点\_干跑_20261025")
+OUT = Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\00_资源库\版本节点\_干跑_20261025")
 CAT = OUT / "00_基线_catalog"
 KEYS = OUT / "00_基线_键清单"
 SHOT = OUT / "样例_头像框"

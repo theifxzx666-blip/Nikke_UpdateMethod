@@ -18,9 +18,9 @@ import re
 import sqlite3
 from pathlib import Path
 
-ROOT = Path(r"D:\Codex\Nikke\Nikke_Skills\版本更新\03_历史\20260813_国际服\01_新角色")
+ROOT = Path(r"D:\Codex\Nikke\02_工位\10_数据管线\版本更新\03_历史\20260813_国际服\01_新角色")
 LSC = Path(r"D:\Codex\临时\nikke_intl_20261029\device\lsc")
-SKILL_JSON = Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\02_Skills\mpdump\out\SkillInfoTable.json")
+SKILL_JSON = Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\02_Skills\mpdump\out\SkillInfoTable.json")
 
 # 角色目录 → 三个技能组（大招 / 技能1 / 技能2），与 PDF 用的是同一组 ID
 CHARS = {

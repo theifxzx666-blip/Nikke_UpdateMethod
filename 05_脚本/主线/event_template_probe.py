@@ -40,7 +40,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-DEFAULT_STATIC = Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\00_资源库\版本节点"
+DEFAULT_STATIC = Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\00_资源库\版本节点"
                       r"\_基线_20261029\00_基线_静态表\_mpdump全量")
 
 COLS = ["EventManager.Id", "活动代号", "sys", "地图 prefab", "开始", "结束", "天数",

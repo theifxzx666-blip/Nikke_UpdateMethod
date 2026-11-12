@@ -37,10 +37,10 @@ INT_ROOT = Path(r"D:\Codex\临时\nikke_intl_20261029")
 DEV = INT_ROOT / "device"
 SDPLAIN = INT_ROOT / "out" / "sdplain"
 
-PACK_ROOT = Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\00_资源库\版本节点")
+PACK_ROOT = Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\00_资源库\版本节点")
 DEFAULT_OUT = PACK_ROOT / "_基线_20261029"
 # 静态表导出器（C#/MemoryPack，见 build_static 的说明）
-MPDUMP = Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\02_Skills\mpdump\bin\Release\net8.0\mpdump.exe")
+MPDUMP = Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\02_Skills\mpdump\bin\Release\net8.0\mpdump.exe")
 
 # 11 张判据表（10-29 判「框/称号/皮肤/卡池/通行证/活动」的第一判据）
 # ProfileCardObjectTable 是「个人主页」的物件总表（背景/贴纸/称号 badge 三类），

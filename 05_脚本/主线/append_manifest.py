@@ -11,7 +11,7 @@ import os
 import sys
 from pathlib import Path
 
-ROOT = Path(r"D:\Codex\Nikke\Nikke_Skills\版本更新\03_历史\20260813_国际服")
+ROOT = Path(r"D:\Codex\Nikke\02_工位\10_数据管线\版本更新\03_历史\20260813_国际服")
 CSV = ROOT / "_素材清单.csv"
 
 # 目录关键字 → kind 名（按最长匹配优先）

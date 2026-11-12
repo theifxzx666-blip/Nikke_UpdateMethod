@@ -71,7 +71,7 @@ def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     if not G.wait_server():
         print("本地 http 服务未响应，先启动：")
-        print(r"  cd D:\Codex\Nikke\Nikke_Skills\版本更新\03_历史\20260813_国际服\05_主线_47-48章\07_关卡莱彻\3D查看器 && "
+        print(r"  cd D:\Codex\Nikke\02_工位\10_数据管线\版本更新\03_历史\20260813_国际服\05_主线_47-48章\07_关卡莱彻\3D查看器 && "
               r"python -m http.server 8765 --bind 127.0.0.1")
         return 1
 

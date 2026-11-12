@@ -13,12 +13,12 @@ import sqlite3
 from collections import Counter, defaultdict
 from pathlib import Path
 
-SD = Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\02_Skills\mpdump\out")
+SD = Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\02_Skills\mpdump\out")
 DEV = Path(r"D:\Codex\临时\nikke_intl_20261029\device")
-BASE = Path(r"D:\Codex\Nikke\Nikke_Skills\版本更新\03_历史\20260813_国际服")
+BASE = Path(r"D:\Codex\Nikke\02_工位\10_数据管线\版本更新\03_历史\20260813_国际服")
 DST = BASE / r"05_主线_47-48章\07_关卡莱彻"
 ILL = BASE / r"05_主线_47-48章\05_图片资源\剧情插画"
-LSS = Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\00_资源库\文本\原始文本库_lss\Locale_Monster.lss")
+LSS = Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\00_资源库\文本\原始文本库_lss\Locale_Monster.lss")
 
 GRADE_CN = {0: "无", 1: "无私级", 2: "仆从级", 3: "主宰级", 4: "领主级", 5: "暴君级", 6: "异端者", 7: "女王"}
 ATTR_CN = {0: "无", 1: "全属性", 2: "金属", 3: "生物", 4: "能量", 5: "未知"}

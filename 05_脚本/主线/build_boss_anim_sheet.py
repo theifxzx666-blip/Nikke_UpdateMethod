@@ -9,7 +9,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageSequence
 import numpy as np
 
-ROOT = Path(r"D:\Codex\Nikke\Nikke_Skills\版本更新\03_历史\20260813_国际服")
+ROOT = Path(r"D:\Codex\Nikke\02_工位\10_数据管线\版本更新\03_历史\20260813_国际服")
 GIF_DIR = ROOT / "05_主线_47-48章" / "07_关卡莱彻" / "动图"
 OUT = GIF_DIR / "00_预览.png"
 

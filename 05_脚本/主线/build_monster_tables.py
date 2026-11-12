@@ -15,14 +15,14 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
-SD = Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\02_Skills\mpdump\out")
+SD = Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\02_Skills\mpdump\out")
 LSC = Path(r"D:\Codex\临时\nikke_intl_20261029\device\lsc")
-DST = Path(r"D:\Codex\Nikke\Nikke_Skills\版本更新\03_历史\20260813_国际服"
+DST = Path(r"D:\Codex\Nikke\02_工位\10_数据管线\版本更新\03_历史\20260813_国际服"
            r"\05_主线_47-48章\07_关卡莱彻")
 ART = Path(r"D:\Codex\临时\nikke_intl_20261029\out\monster_standee")
-ICON_DIR = [Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\00_资源库\UI图标HD\icons-monster_full(hd)"),
-            Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\00_资源库\UI图标HD\icons-monster(hd)"),
-            Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\00_资源库\技能资源\技能图标")]
+ICON_DIR = [Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\00_资源库\UI图标HD\icons-monster_full(hd)"),
+            Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\00_资源库\UI图标HD\icons-monster(hd)"),
+            Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\00_资源库\技能资源\技能图标")]
 
 GRADE_CN = {0: "无", 1: "无私级", 2: "仆从级", 3: "主宰级", 4: "领主级",
             5: "暴君级", 6: "异端者", 7: "女王"}

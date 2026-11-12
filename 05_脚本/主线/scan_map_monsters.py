@@ -9,7 +9,7 @@ from pathlib import Path
 
 import UnityPy
 
-SD = Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\02_Skills\mpdump\out")
+SD = Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\02_Skills\mpdump\out")
 DEV = Path(r"D:\Codex\临时\nikke_intl_20261029\device")
 LSC = Path(r"D:\Codex\临时\nikke_intl_20261029\device\lsc")
 
@@ -22,7 +22,7 @@ def jl(n):
 
 def monster_names():
     """MonsterModelTable.MonPrefab -> 中文名（经 MonsterTable.NameLocalkey）。"""
-    f = Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\00_资源库\文本\原始文本库_lss\Locale_Monster.lss")
+    f = Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\00_资源库\文本\原始文本库_lss\Locale_Monster.lss")
     con = sqlite3.connect(f"file:{f}?mode=ro", uri=True)
     loc = dict(con.execute('select "Key","zh-CN" from Locale_Monster'))
     con.close()

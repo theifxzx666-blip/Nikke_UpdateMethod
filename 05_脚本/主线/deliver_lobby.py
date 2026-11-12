@@ -16,7 +16,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 SRC = Path(r"D:\Codex\临时\nikke_intl_20261029\out")
-DST = Path(r"D:\Codex\Nikke\Nikke_Skills\版本更新\03_历史\20260813_国际服"
+DST = Path(r"D:\Codex\Nikke\02_工位\10_数据管线\版本更新\03_历史\20260813_国际服"
            r"\06_角色大厅站立动画")
 
 # cID_序号 → (角色, cID, 序号, 时装名)

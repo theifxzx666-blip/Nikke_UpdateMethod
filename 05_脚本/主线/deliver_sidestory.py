@@ -12,7 +12,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 SRC = Path(r"D:\Codex\临时\nikke_intl_20261029\out\sidestory_cg\side_06")
-DST = Path(r"D:\Codex\Nikke\Nikke_Skills\版本更新\03_历史\20260813_国际服"
+DST = Path(r"D:\Codex\Nikke\02_工位\10_数据管线\版本更新\03_历史\20260813_国际服"
            r"\05_主线_47-48章\04_剧情文本\番外篇\插画_GINGERBREAD HOUSE")
 
 SIDE = 6

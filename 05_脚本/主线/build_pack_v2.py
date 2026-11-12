@@ -12,11 +12,11 @@ import sqlite3
 import sys
 from pathlib import Path
 
-ROOT = Path(r"D:\Codex\Nikke\Nikke_Skills\版本更新\03_历史\20260813_国际服")
-RES = Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\00_资源库")
+ROOT = Path(r"D:\Codex\Nikke\02_工位\10_数据管线\版本更新\03_历史\20260813_国际服")
+RES = Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\00_资源库")
 EXP = Path(r"D:\Codex\临时\nikke_intl_20261029\device\png")
 SPINE_OUT = Path(r"D:\Codex\临时\spine_js\out")
-BANNER = Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\00_资源库\版本节点\_干跑_20261025\06_预演数据\banner_260813")
+BANNER = Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\00_资源库\版本节点\_干跑_20261025\06_预演数据\banner_260813")
 LSC = Path(r"D:\Codex\临时\nikke_intl_20261029\device\lsc")
 
 TAG = re.compile(r"<[^>]+>")

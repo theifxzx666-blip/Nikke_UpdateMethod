@@ -38,12 +38,20 @@ WORK_PREFIX_CN = ("cat_all", "lss", "uc_probe", "saus", "apkmeta")
 # 设备侧绝对路径（Android）与 PC 客户端内部路径（如国服 runtime_data\...），只 WARN
 DEVICE_PREFIX = ("/storage/", "/sdcard/", "/data/", "/system/", "runtime_data/", "nikke_Data/")
 # 文档里的 `00_资源库\...` 实际位于 `拆包\00_资源库\...`（跨根引用，按需 exists 探测，不做全量索引）
-ALIAS_ROOT = ("00_资源库/", Path(r"D:\Codex\Nikke\Nikke_Skills\拆包"))
+ALIAS_ROOT = ("00_资源库/", Path(r"D:\Codex\Nikke\01_母体\B_客户端资源"))
 # 运行时才生成的产物名（文档里作为「会产出什么」出现），只 WARN
 OUTPUT_NAME = {"raw_keys.tsv", "00_导出报告.tsv", "00_活动清单.tsv", "_报告.pdf",
-               "基线说明.md"}
+               "基线说明.md", "称号.json"}
 # 计划中、尚未写的脚本（文档里作为「下一步要做什么」出现），只 WARN
 PLANNED = {"map_cache.py"}
+# **外部工具**的脚本，不是本仓库文件。07-battle-scene 的 reference 拿它们做口径对照：
+#   assembly.md 写「ChargeMap `build_assembly.py`」、charge.md 写「ChargeMap 的 `scan_px.py`」。
+# 不加这条会一直算 2 处 FAIL，把「路径全部落地」这个判据永远卡在 7 处。
+EXTERNAL = {"build_assembly.py", "scan_px.py"}
+# 外部解包器（Doro_Repacker_EX 的 NAU）的内部目录结构，见
+# 03-asset-extract/reference/cn-nkab.md：「来源 …/Doro_Repacker_EX 的 `NAU/` 目录」。
+# 这些目录在别人的仓库里，本仓库不可能有。
+EXTERNAL_DIR = {"nau", "keys", "sprite", "texture2d"}
 # 形如 `a2.example.com/path.json` 的域名相对路径，不是本地路径，跳过
 DOMAIN_PATH = re.compile(r"^[a-z0-9][a-z0-9\-]*(\.[a-z0-9\-]+)*\.[a-z]{2,6}/", re.I)
 
@@ -51,7 +59,10 @@ DOMAIN_PATH = re.compile(r"^[a-z0-9][a-z0-9\-]*(\.[a-z0-9\-]+)*\.[a-z]{2,6}/", r
 # 若有人把它们拷回 00_规范，不要加白名单跳过——那等于让 190 KB 的旧口径重新参与引用。
 SKIP_FILE = ()
 # 额外索引的外部目录（ROOT 之外的既定资源位置）
-EXTRA_ROOTS = [Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\02_Skills\mpdump\out")]
+# `版本更新\` 是实际工作区，与 ROOT（方法仓库）并行：文档里写的 `06_回收站\`、
+# `04_作业区\`、`03_历史\` 都在那边。不索引它，这些引用会全部误报 FAIL。
+EXTRA_ROOTS = [Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\02_Skills\mpdump\out"),
+               Path(r"D:\Codex\Nikke\02_工位\10_数据管线\版本更新")]
 
 
 def norm(s: str) -> str:
@@ -131,6 +142,8 @@ def main() -> None:
                 warn.append((f, span))            # 运行时产物，跑完才有
             elif base in {x.lower() for x in PLANNED}:
                 warn.append((f, span))            # 计划中的脚本，还没写
+            elif base in {x.lower() for x in EXTERNAL} or low in EXTERNAL_DIR:
+                warn.append((f, span))            # 外部工具（ChargeMap / Doro_Repacker_EX），不在本仓库
             elif low.startswith(WORK_PREFIX) or low.split("/", 1)[0] in WORK_PREFIX_CN:
                 warn.append((f, span))            # <WORK> / <CN_ROOT> 工作区
             else:
@@ -138,7 +151,7 @@ def main() -> None:
 
     print(f"扫描 {len(targets)} 个 md｜检查 {checked} 处路径｜跳过 {skipped} 处非路径片段")
     if warn:
-        print(f"\n[WARN] {len(warn)} 处是 <WORK> 工作区相对路径（不在 ROOT 下，属正常）：")
+        print(f"\n[WARN] {len(warn)} 处属正常引用（工作区相对路径 / 运行时产物 / 计划脚本 / 外部工具）：")
         for f, span in warn[:12]:
             print(f"  `{span}`")
     if not bad:

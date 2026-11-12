@@ -9,8 +9,8 @@ from pathlib import Path
 
 SRC_MON = Path(r"D:/Codex/临时/nikke_intl_20261029/out/monster_standee")
 SRC_XRY = Path(r"D:/Codex/临时/nikke_intl_20261029/out/monster_xray")
-BASE = Path(r"D:/Codex/Nikke/Nikke_Skills/版本更新/03_历史/20260813_国际服/05_主线_47-48章/07_关卡莱彻")
-RECY = Path(r"D:/Codex/Nikke/Nikke_Skills/拆包/05_回收站/20261025_莱彻立绘_旧版")
+BASE = Path(r"D:/Codex/Nikke/02_工位/10_数据管线/版本更新/03_历史/20260813_国际服/05_主线_47-48章/07_关卡莱彻")
+RECY = Path(r"D:/Codex/Nikke/01_母体/B_客户端资源/05_回收站/20261025_莱彻立绘_旧版")
 
 # 序号, 中文名, 型号, 源文件 stem, 来源
 ITEMS = [

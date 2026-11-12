@@ -13,9 +13,9 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 SRC = Path(r"D:\Codex\临时\nikke_intl_20261029\out\cutscene_lw")
-DST = Path(r"D:\Codex\Nikke\Nikke_Skills\版本更新\03_历史\20260813_国际服"
+DST = Path(r"D:\Codex\Nikke\02_工位\10_数据管线\版本更新\03_历史\20260813_国际服"
            r"\07_角色爆裂特写")
-LOBBY = Path(r"D:\Codex\Nikke\Nikke_Skills\版本更新\03_历史\20260813_国际服"
+LOBBY = Path(r"D:\Codex\Nikke\02_工位\10_数据管线\版本更新\03_历史\20260813_国际服"
              r"\06_角色大厅站立动画\00_清单.tsv")
 # 爆裂特写只有 3 个包（c870_00 / c871_00 / c872_00）—— 每个角色一份，
 # 同一角色的多套时装共用。与大厅站立（每时装一份 bundle）不同。

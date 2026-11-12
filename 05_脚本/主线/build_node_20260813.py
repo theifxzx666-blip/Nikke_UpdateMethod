@@ -3,7 +3,7 @@
 
 数据源（全部本地实测产物，不联网、不猜）：
   1. D:\\Codex\\临时\\nikke_intl_20261029\\device\\lsc\\*.dec   ← pull_lsc.py 从设备 saus/raw 拉取并解密
-  2. D:\\Codex\\Nikke\\Nikke_Skills\\拆包\\02_Skills\\mpdump\\out\\  ← StaticData_152 静态表导出
+  2. D:\\Codex\\Nikke\\01_母体\\B_客户端资源\\02_Skills\\mpdump\\out\\  ← StaticData_152 静态表导出
   3. 拆包\\00_资源库\\版本节点\\_干跑_20261025\\00_基线_静态表\\  ← 基线静态表快照
 
 输出（写到版更节点目录）：
@@ -18,8 +18,8 @@ from pathlib import Path
 
 DEV = Path(r"D:\Codex\临时\nikke_intl_20261029\device")
 LSC = DEV / "lsc"
-MPD = Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\02_Skills\mpdump\out")
-NODE = Path(r"D:\Codex\Nikke\Nikke_Skills\版本更新\03_历史\20260813_国际服")
+MPD = Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\02_Skills\mpdump\out")
+NODE = Path(r"D:\Codex\Nikke\02_工位\10_数据管线\版本更新\03_历史\20260813_国际服")
 EV = NODE / "06_证据"
 
 CIDS = [870, 871, 580]

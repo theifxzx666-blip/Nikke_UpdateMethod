@@ -8,8 +8,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 DEV = Path(r"D:/Codex/临时/nikke_intl_20261029/device")
 SRC = Path(r"D:/Codex/临时/nikke_intl_20261029/out/monster_standee")
-BASE = Path(r"D:/Codex/Nikke/Nikke_Skills/版本更新/03_历史/20260813_国际服/05_主线_47-48章/07_关卡莱彻")
-LSS = Path(r"D:/Codex/Nikke/Nikke_Skills/拆包/00_资源库/文本/原始文本库_lss/Locale_Monster.lss")
+BASE = Path(r"D:/Codex/Nikke/02_工位/10_数据管线/版本更新/03_历史/20260813_国际服/05_主线_47-48章/07_关卡莱彻")
+LSS = Path(r"D:/Codex/Nikke/01_母体/B_客户端资源/00_资源库/文本/原始文本库_lss/Locale_Monster.lss")
 
 # 型号 → (文件名, 中文名, 来源)
 ITEMS = [

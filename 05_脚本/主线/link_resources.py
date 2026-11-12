@@ -12,9 +12,9 @@ import hashlib
 import os
 from pathlib import Path
 
-RES = Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\00_资源库")
-NODE = Path(r"D:\Codex\Nikke\Nikke_Skills\版本更新\03_历史\20260813_国际服")
-DRY = Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\00_资源库\版本节点\_干跑_20261025")
+RES = Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\00_资源库")
+NODE = Path(r"D:\Codex\Nikke\02_工位\10_数据管线\版本更新\03_历史\20260813_国际服")
+DRY = Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\00_资源库\版本节点\_干跑_20261025")
 EV = NODE / "06_证据"
 
 CHARS = [("QUEEN（真）_c870", 870, ["00", "01", "02"]),

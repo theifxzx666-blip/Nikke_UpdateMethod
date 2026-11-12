@@ -10,7 +10,7 @@ from pathlib import Path
 
 from PIL import Image
 
-NODE = Path(r"D:\Codex\Nikke\Nikke_Skills\版本更新\03_历史\20260813_国际服")
+NODE = Path(r"D:\Codex\Nikke\02_工位\10_数据管线\版本更新\03_历史\20260813_国际服")
 CHROME = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
 HTML = NODE / "_报告_20260813.html"
 PDF = NODE / "2026-08-13_国际服更新还原报告.pdf"

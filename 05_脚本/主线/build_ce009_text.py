@@ -13,7 +13,7 @@ import sqlite3
 from pathlib import Path
 
 LSC = Path(r"D:\Codex\临时\nikke_intl_20261029\device\lsc")
-OUT = Path(r"D:\Codex\Nikke\Nikke_Skills\版本更新\03_历史\20260813_国际服"
+OUT = Path(r"D:\Codex\Nikke\02_工位\10_数据管线\版本更新\03_历史\20260813_国际服"
            r"\03_活动\PERSONA ON FRONTLINE（ce009）\活动文本")
 LANGS = [("zh-CN", "简中"), ("zh-TW", "繁中"), ("ja", "日文"), ("en", "英文"), ("ko", "韩文")]
 
