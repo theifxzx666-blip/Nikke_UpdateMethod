@@ -3,6 +3,7 @@
 
 技能名 / 简介一律从 Locale_Skill、Locale_Character 读取，不硬编码。
 """
+import hashlib
 import json
 import os
 import re
@@ -13,14 +14,14 @@ import sys
 from pathlib import Path
 
 CHROME = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
-ROOT = Path(r"D:\Codex\Nikke\Nikke_Skills\版本更新\03_历史\20260813_国际服")
+ROOT = Path(r"D:\Codex\Nikke\02_工位\10_数据管线\版本更新\03_历史\20260813_国际服")
 LSC = Path(r"D:\Codex\临时\nikke_intl_20261029\device\lsc")
 # 技能数值的唯一权威表：SkillInfoTable（按 GroupId 分组，SkillLevel 1~15）
-SKILL_JSON = Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\02_Skills\mpdump\out\SkillInfoTable.json")
+SKILL_JSON = Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\02_Skills\mpdump\out\SkillInfoTable.json")
 # icons-skill(hd) 包里按 Icon 名导出的 128×128 图标
 ICON_SRC = Path(r"D:\Codex\临时\nikke_intl_20261029\out\skill_icons")
 # dp 桶（下载包）全量键清单，用于统计扫图/插画键的分布，不在脚本里写数
-KEYLIST = Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\00_资源库\版本节点\_干跑_20261025\00_基线_键清单\dp_keys.txt")
+KEYLIST = Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\00_资源库\版本节点\_干跑_20261025\00_基线_键清单\dp_keys.txt")
 HTML = ROOT / "_构建" / "报告.html"
 PDF = ROOT / "2026-08-13_更新内容一览.pdf"
 
@@ -28,13 +29,15 @@ PDF = ROOT / "2026-08-13_更新内容一览.pdf"
 # 简版不另写脚本：同一份 HTML，按页白名单删出来。另写必然两份数据各自维护，
 # 一定会分裂（E-03 就是这么来的）。
 #   BRIEF=1 python make_pdf_v2.py                      → 用默认白名单
-#   BRIEF=1 BRIEF_PAGES=0,1,2,4,6,11,21,47 python make_pdf_v2.py
+#   BRIEF=1 BRIEF_PAGES=0,1,2,3,4,5,7,13,38 python make_pdf_v2.py
 BRIEF = os.environ.get("BRIEF") == "1"
-# 默认白名单对齐 00_规范/交付模板/简版模板.md 的 5 章：
-#   0 封面 / 1 本期有什么 / 2,4,6 三名角色 / 11 活动 / 21 主线 / 47 素材汇总
+# 默认白名单（2026-10-27 按 39 页重排后重新核对）：
+#   0 封面 / 1 本期有什么 / 2,3,4 三名角色（单页卡，含技能全文）/ 5 皮肤
+#   / 7 活动 / 13 主线两章 / 38 本包收录了什么（素材汇总表，简版模板第 4 章必备）
+# 注意 38 不是 36：「角色大厅站立动画」是 Spine 技术页，属简版禁选；汇总表才是必需的一章。
 # 每期页数会变，**白名单必须按当期实际页序核对一遍再跑**（先用 --html-only 看页标题）
 BRIEF_PAGES = {int(x) for x in
-               os.environ.get("BRIEF_PAGES", "0,1,2,4,6,11,21,47").split(",") if x.strip()}
+               os.environ.get("BRIEF_PAGES", "0,1,2,3,4,5,7,13,38").split(",") if x.strip()}
 # 简版里不许出现的词（读者不需要知道怎么拆的）
 BRIEF_WORDS = ("Timeline", "Spine", "bundle", "UnityPy", "mdump",
                ".lss", ".lsc", "adb", "CDP", "脚本", "拆包")
@@ -83,135 +86,315 @@ SKINS = [
 ]
 
 CSS = """
-@page { size:A4 portrait; margin:13mm 13mm 14mm; }
-* { box-sizing:border-box; }
-body { margin:0; font-family:"Microsoft YaHei UI","Microsoft YaHei",sans-serif;
-       font-size:10pt; color:#1c2028; line-height:1.6; }
-.page { page-break-after:always; height:266mm; display:flex; flex-direction:column; overflow:hidden; }
-.page:last-child { page-break-after:auto; }
-h1,h2,h3 { margin:0; font-weight:700; }
-img { display:block; }
-.mono { font-family:Consolas,monospace; }
-/* 线上地址：Chrome 打印时会把 <a href> 带成 PDF 的链接注解，纸上也能点 */
-a { color:#3d5afe; text-decoration:none; border-bottom:.4mm dotted #a8b8f5; }
-.url { font-family:Consolas,monospace; font-size:8.6pt; word-break:break-all; }
+/* ============ 视觉基调：深棕黑底 + 暖金 + 中文衬线 ============
+   参考 https://www.blablalink.com/events/nikke4th/ 的实测量值：
+   body #231f1e，细衬线标题，关键词【中括号】，罗马数字 Ⅲ，+ ✧ 角饰。
+   满出血：@page margin 0，底色铺到纸边，没有白框。 */
+:root{
+  --bg:#231f1e; --bg-deep:#1b1716; --panel:#2b2523; --panel-2:#332c29;
+  --ink:#e9e5e0; --ink-2:#c4bdb7; --mut:#8d8792; --gold:#c9a227;
+  --gold-dim:rgba(201,162,39,.30); --line:rgba(233,229,224,.10);
+  --serif:Georgia,"Times New Roman","Source Han Serif SC","Noto Serif SC",
+          "Songti SC",SimSun,"宋体",serif;
+  --sans:"Microsoft YaHei UI","Microsoft YaHei","PingFang SC",sans-serif;
+}
+@page { size:A4 portrait; margin:0; }
+*{ box-sizing:border-box; }
+html{ background:var(--bg); }
+html,body,.page,.cover{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+body{ margin:0; background:var(--bg); color:var(--ink); font-family:var(--serif);
+      font-size:9.4pt; line-height:1.62; -webkit-font-smoothing:antialiased; }
+/* 297 - 0.5mm 余量：正好 297mm 时 Chrome 会因取整多吐一张空白页 */
+.page{ width:210mm; height:296.5mm; padding:14mm 16mm 11mm; overflow:hidden;
+       page-break-after:always; display:flex; flex-direction:column;
+       background:var(--bg); position:relative; }
+.page:last-child{ page-break-after:auto; }
+h1,h2,h3{ margin:0; font-weight:400; }
+img{ display:block; }
+/* 栅格里的 figure 默认 min-width:auto，长文件名的 nowrap figcaption 会把列撑宽，
+   8 列图标因此横向溢出到页外（2026-10-26 实测：图标被切在右边）。统一压掉。 */
+.page figure{ min-width:0; }
+.page figcaption{ overflow:hidden; }
+b,strong{ font-weight:700; color:#fff; }
+.mono,.num{ font-family:Consolas,"Cascadia Mono",monospace; }
+a{ color:var(--gold); text-decoration:none;
+   border-bottom:.25mm dotted rgba(201,162,39,.55); }
+.url{ font-family:Consolas,monospace; font-size:8.4pt; word-break:break-all;
+      color:var(--ink-2); }
 
-.cover { height:266mm; background:linear-gradient(150deg,#0e1220 0%,#1a2340 46%,#2b1f3e 100%);
-         color:#fff; border-radius:5mm; padding:16mm 15mm; position:relative; overflow:hidden; }
-.cover .kicker { font-size:8.5pt; letter-spacing:.34em; color:#8fa6d8; }
-.cover h1 { font-size:33pt; line-height:1.16; margin:5mm 0 3mm; }
-.cover .sub { font-size:11.5pt; color:#b9c6e4; }
-.cover .badges { margin-top:5mm; position:relative; z-index:3; }
-.cover .badge { display:inline-block; padding:1.2mm 2.8mm; border:.35mm solid #5d76b8;
-                border-radius:2mm; font-size:8pt; color:#a8bbe6; margin:0 2mm 2mm 0; }
-.cover .meta { position:absolute; left:15mm; bottom:14mm; font-size:8.5pt;
-               color:#94a2c4; line-height:1.9; z-index:3; }
-.cover .heroes { position:absolute; right:6mm; bottom:-4mm; display:flex;
-                 align-items:flex-end; gap:0; z-index:1; }
-.cover .heroes img { height:132mm; filter:drop-shadow(0 5mm 9mm rgba(0,0,0,.5)); }
+/* ---------- 封面：整幅出血 + 人物压图 ---------- */
+.cover{ height:296.5mm; width:210mm; padding:20mm 18mm 16mm; position:relative;
+        overflow:hidden; color:var(--ink);
+        background:
+          radial-gradient(120% 78% at 74% 88%, rgba(201,162,39,.16) 0%, rgba(201,162,39,0) 62%),
+          radial-gradient(90% 60% at 12% 6%, rgba(233,229,224,.07) 0%, rgba(0,0,0,0) 58%),
+          linear-gradient(168deg,#2b2422 0%,#231f1e 42%,#191514 100%); }
+/* 立绘压在封面上，底部那行 meta 会落在裙子/大腿上完全读不出来。
+   ::after 已经给角饰占了，这里用 ::before 做一条 70mm 高的压暗层，
+   层级放在 heroes(1) 之上、文字(3) 之下。 */
+.cover::before{ content:""; position:absolute; left:0; right:0; bottom:0; height:70mm;
+                z-index:2; pointer-events:none;
+                background:linear-gradient(0deg,rgba(22,18,17,.97) 0%,
+                  rgba(22,18,17,.90) 32%, rgba(22,18,17,0) 100%); }
+.cover::after{ content:"+ ✧"; position:absolute; right:16mm; top:15mm; z-index:3;
+               font-family:var(--serif); font-size:10pt; letter-spacing:.5em;
+               color:rgba(201,162,39,.62); }
+.cover .kicker{ font-family:var(--sans); font-size:7.6pt; letter-spacing:.52em;
+                color:var(--gold); margin-bottom:9mm; position:relative; z-index:3; }
+.cover h1{ font-family:var(--serif); font-size:38pt; line-height:1.18; color:#f3efeb;
+           letter-spacing:.02em; position:relative; z-index:3; }
+.cover h1 em{ font-style:normal; color:var(--gold); }
+.cover .sub{ font-size:10.6pt; color:var(--ink-2); margin-top:5mm;
+             letter-spacing:.06em; max-width:122mm; line-height:1.85;
+             position:relative; z-index:3; }
+.cover .badges{ margin-top:9mm; position:relative; z-index:3; max-width:104mm; }
+.cover .badge{ display:inline-block; padding:1.1mm 3mm; margin:0 2mm 2mm 0;
+               border:.25mm solid rgba(201,162,39,.42); font-family:var(--sans);
+               font-size:7.4pt; letter-spacing:.1em; color:#d8cfc7; }
+.cover .meta{ position:absolute; left:18mm; bottom:16mm; font-size:8pt;
+              color:var(--mut); line-height:1.95; z-index:3; letter-spacing:.06em; }
+.cover .meta b{ color:var(--ink-2); font-weight:400; }
+/* 三张立绘宽高比合计 1.538 → 142mm 高时总宽 218mm，左右各溢 4mm 出血，
+   再多就会把最左边的 QUEEN 切掉半张。 */
+.cover .heroes{ position:absolute; right:-2mm; bottom:-6mm; display:flex;
+                align-items:flex-end; gap:0; z-index:1; }
+.cover .heroes img{ height:142mm; filter:drop-shadow(0 6mm 12mm rgba(0,0,0,.72)); }
 
-.h2 { font-size:16pt; border-left:1.6mm solid #3d5afe; padding-left:3mm; margin-bottom:3.5mm; }
-.h2 small { font-size:9pt; color:#7b8494; font-weight:400; margin-left:2mm; }
-.lead { color:#4a5261; font-size:9.5pt; margin-bottom:5mm; }
-table { width:100%; border-collapse:collapse; font-size:9pt; }
-th,td { padding:2.2mm 2.6mm; border-bottom:.3mm solid #e3e7ef; text-align:left; vertical-align:top; }
-th { background:#f4f6fb; font-weight:700; color:#33405c; }
-.tag { display:inline-block; padding:.4mm 2mm; border-radius:1.4mm; font-size:8pt;
-       background:#eef1f9; color:#3b4a6b; margin-right:1.2mm; }
-.tag.ssr { background:#fff2d8; color:#8a5a00; }
-.tag.sr  { background:#e8f2ff; color:#1a5ba8; }
+/* ---------- 章节标题：罗马数字 + 金色细线 ---------- */
+body{ counter-reset:sec; }
+.h2{ counter-increment:sec; font-family:var(--serif); font-size:15.5pt;
+     line-height:1.34; color:#f1ede9; letter-spacing:.02em; padding-bottom:2.6mm;
+     margin-bottom:4mm; border-bottom:.22mm solid var(--gold-dim); position:relative; }
+.h2::before{ content:counter(sec,upper-roman); font-size:8.4pt; color:var(--gold);
+             letter-spacing:.26em; margin-right:3.2mm; vertical-align:.34em; }
+.h2::after{ content:""; position:absolute; left:0; bottom:-.22mm; width:26mm;
+            height:.5mm; background:var(--gold); }
+.h2 small{ font-family:var(--sans); font-size:8.4pt; color:var(--mut);
+           font-weight:400; margin-left:3mm; letter-spacing:.04em; }
+.lead{ color:var(--ink-2); font-size:9pt; margin-bottom:4.5mm; line-height:1.75; }
+/* 页内二级小标题（同一页里换主题时用，比 h2 轻一档） */
+.h3line{ font-family:var(--serif); font-size:10.5pt; color:#f1ede9;
+         margin:5.5mm 0 2.6mm; padding-bottom:1.4mm;
+         border-bottom:.18mm solid var(--line); }
+.h3line small{ font-family:var(--sans); font-size:7.6pt; color:var(--mut);
+               margin-left:2.5mm; letter-spacing:.04em; }
 
-.grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:4mm; }
-.card { border:.3mm solid #e3e7ef; border-radius:3mm; padding:3mm; background:#fbfcfe; }
-.card .nm { font-weight:700; font-size:11pt; margin-top:1.5mm; }
-.card .en { font-size:8pt; color:#8892a6; }
+/* ---------- 表格 ---------- */
+table{ width:100%; border-collapse:collapse; font-size:8.8pt; }
+th,td{ padding:2mm 2.6mm; border-bottom:.2mm solid var(--line);
+       text-align:left; vertical-align:top; }
+th{ background:rgba(201,162,39,.10); color:#eadfc6; font-family:var(--sans);
+    font-weight:700; font-size:8pt; letter-spacing:.06em;
+    border-bottom:.2mm solid rgba(201,162,39,.34); }
+tbody tr:nth-child(even){ background:rgba(233,229,224,.022); }
+.tight th,.tight td{ padding:.9mm 1.5mm; }
+.stage th,.stage td{ padding:.62mm 1.2mm; }
+.nowrap{ white-space:nowrap; }
 
-.charTop { display:flex; gap:8mm; }
-.charTop .art { flex:0 0 58%; background:#f5f7fc; border-radius:3mm; padding:3mm;
-                align-self:flex-start; }
-.charTop .art img { width:100%; height:auto; }
-.charTop .info { flex:1; padding-top:2mm; }
-.cname { font-size:26pt; font-weight:700; line-height:1.2; }
-.cen { font-size:10pt; color:#8892a6; margin-bottom:3.5mm; }
-.kv { font-size:9.5pt; color:#3c4455; margin-bottom:1.1mm; }
-.kv b { color:#1c2028; }
-.desc { margin:4mm 0 6mm; font-size:10pt; color:#4a5261; line-height:1.8; }
-.skills { display:grid; grid-template-columns:repeat(3,1fr); gap:4mm; margin-top:5mm; }
-.skills .row { padding:3mm; border:.3mm solid #e3e7ef; border-radius:2.5mm;
-               background:#fbfcfe; display:flex; gap:3mm; align-items:center; }
-.skills .k { font-size:7.6pt; color:#8892a6; }
-.skills .n { font-size:9.6pt; font-weight:700; color:#1c2028; line-height:1.35; }
-.skills .d { font-size:9.2pt; color:#67708a; margin-top:.6mm; line-height:1.55; }
+/* ---------- 标签 ---------- */
+.tag{ display:inline-block; padding:.35mm 2.2mm; margin-right:1.4mm;
+      border:.2mm solid rgba(201,162,39,.38); font-family:var(--sans);
+      font-size:7.4pt; letter-spacing:.08em; color:#d5ccc4; }
+.tag.ssr{ border-color:rgba(238,192,74,.72); color:#f0cd72;
+          background:rgba(238,192,74,.10); }
+.tag.sr{ border-color:rgba(150,190,235,.55); color:#b8d3ee;
+         background:rgba(150,190,235,.08); }
 
-.skdet .skblk { border:.3mm solid #e3e7ef; border-radius:3mm; padding:3mm 3.6mm;
-                margin-bottom:3.2mm; background:#fbfcfe; }
-.skdet .hd { display:flex; gap:3mm; align-items:center;
-             border-bottom:.3mm solid #edf0f6; padding-bottom:2mm; margin-bottom:2mm; }
-.skdet .ic { width:14mm; height:14mm; border-radius:2.4mm; flex:0 0 14mm;
-             background:linear-gradient(140deg,#1a2131,#2b3752);
-             display:flex; align-items:center; justify-content:center; }
-.skdet .ic img { width:11mm; height:11mm; }
-.skdet .k { font-size:7.8pt; color:#8892a6; letter-spacing:.06em; }
-.skdet .n { font-size:12pt; font-weight:700; color:#1c2028; line-height:1.35; }
-.skdet .bd { font-size:8.7pt; line-height:1.56; color:#39404f; }
-.skdet .ln { margin-bottom:.7mm; }
-.skdet .kw { color:#0f62c9; }
-.skills .ic { width:13mm; height:13mm; border-radius:2mm; flex:0 0 13mm;
-              background:linear-gradient(140deg,#1a2131,#2b3752);
-              display:flex; align-items:center; justify-content:center; }
-.skills .ic img { width:10mm; height:10mm; }
-.files { margin-top:4mm; font-size:7.8pt; color:#8892a6; line-height:1.75;
-         border-top:1px dashed #dde3ee; padding-top:2mm; }
-.files b { color:#5b6479; font-weight:600; }
+/* ---------- 卡片 / 栅格 ---------- */
+.grid3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:4mm; }
+.card{ border:.2mm solid var(--line); background:var(--panel); padding:3mm; }
+.card .nm{ font-family:var(--serif); font-size:11pt; margin-top:1.5mm; color:#f1ede9; }
+.card .en{ font-size:8pt; color:var(--mut); }
 
-.skin { display:flex; gap:5mm; margin-bottom:6mm; height:116mm; }
-.skin .a { flex:0 0 50%; background:#f5f7fc; border-radius:3mm; padding:3mm;
-           display:flex; align-items:center; justify-content:center; }
-.skin .a img { width:auto; height:auto; max-width:100%; max-height:100%; }
-.skin .b { flex:1; padding-top:1mm; }
-.skin h3 { font-size:14pt; margin-bottom:1mm; }
-.skin .en { font-size:8.5pt; color:#8892a6; margin-bottom:3mm; }
+/* ---------- 角色页 ---------- */
+.charTop{ display:flex; gap:9mm; height:124mm; }
+/* align-self 不能再设 flex-start：那样 .art 高度由内容决定，img 的 height:100%
+   会退化成 auto，窄立绘（埃癸斯 0.301）按 width:100% 撑到 270mm 高、直接盖住整页。 */
+.charTop .art{ flex:0 0 56%; align-self:stretch; padding:0;
+               background:radial-gradient(72% 62% at 50% 42%,
+                 rgba(201,162,39,.10) 0%, rgba(201,162,39,0) 70%),
+                 linear-gradient(172deg,#312a27 0%,#241f1e 64%,#1a1615 100%);
+               border:.18mm solid rgba(201,162,39,.16); }
+.charTop .art img{ width:100%; height:100%; object-fit:contain;
+                   object-position:center bottom; }
+.charTop .info{ flex:1; padding-top:0; }
+.cname{ font-family:var(--serif); font-size:27pt; line-height:1.16; color:#f5f1ed;
+        letter-spacing:.02em; }
+.cen{ font-family:var(--sans); font-size:8.6pt; color:var(--gold);
+      letter-spacing:.26em; text-transform:uppercase; margin:1.6mm 0 4mm; }
+.kv{ font-size:9pt; color:var(--ink-2); margin-bottom:1.1mm; }
+.kv b{ color:#fff; }
+.desc{ margin:4mm 0 5mm; font-size:9.4pt; color:var(--ink-2); line-height:1.86;
+       border-left:.5mm solid var(--gold-dim); padding-left:3.4mm; }
+.files{ margin-top:4mm; padding-top:2mm; font-family:var(--sans);
+        font-size:7.4pt; color:var(--mut); line-height:1.72;
+        border-top:.18mm dashed var(--line); }
+.files b{ color:var(--ink-2); font-weight:600; }
 
-.wall2 { display:grid; grid-template-columns:1fr 1fr; gap:4mm; }
-.wall2 figure { margin:0; }
-.wall2 img { width:100%; border-radius:2.5mm; }
-.wall2 figcaption { font-size:8pt; color:#7b8494; margin-top:1mm; }
-.row5 { display:grid; grid-template-columns:repeat(5,1fr); gap:2mm; margin-top:3mm; }
-.row5 img { width:100%; border-radius:1.5mm; }
-.row5 div.t { font-size:7.4pt; color:#7b8494; text-align:center; margin-top:0.6mm; }
-.side4 { display:grid; grid-template-columns:repeat(4,1fr); gap:3mm; margin-top:4mm; }
-.side4 img { width:100%; height:56mm; object-fit:contain; border-radius:1.5mm; background:#0e1116; }
-.side4 div.t { font-size:7.4pt; color:#4a5261; text-align:center; margin-top:1mm; line-height:1.35; }
+/* ---------- 技能：图标格 ---------- */
+.skills{ display:grid; grid-template-columns:repeat(3,1fr); gap:3.4mm; margin-top:5mm; }
+.skills .row{ display:flex; gap:2.6mm; align-items:center; padding:2.6mm;
+              background:var(--panel); border:.18mm solid var(--line); }
+.skills .ic{ width:13mm; height:13mm; flex:0 0 13mm; display:flex;
+             align-items:center; justify-content:center;
+             background:linear-gradient(140deg,#3a322e,#241f1e);
+             border:.18mm solid rgba(201,162,39,.20); }
+.skills .ic img{ width:10.4mm; height:10.4mm; }
+.skills .k{ font-family:var(--sans); font-size:7pt; color:var(--gold);
+            letter-spacing:.12em; }
+.skills .n{ font-size:9.4pt; color:#f1ede9; line-height:1.36; }
+.skills .d{ font-size:8.8pt; color:var(--mut); margin-top:.6mm; line-height:1.55; }
+
+/* ---------- 技能：单页卡三列全文（S4 起取代上面的图标格） ---------- */
+.skcol{ display:grid; grid-template-columns:repeat(3,1fr); gap:3.6mm;
+        margin-top:4mm; align-items:start; }
+.skb{ background:var(--panel); border:.18mm solid var(--line);
+      border-top:.55mm solid rgba(201,162,39,.55); padding:2.6mm 2.8mm 3mm; }
+.skb .hd{ display:flex; gap:2.4mm; align-items:center; padding-bottom:1.8mm;
+          margin-bottom:1.8mm; border-bottom:.18mm solid var(--line); }
+.skb .ic{ width:11mm; height:11mm; flex:0 0 11mm; display:flex;
+          align-items:center; justify-content:center;
+          background:linear-gradient(140deg,#3a322e,#241f1e);
+          border:.18mm solid rgba(201,162,39,.20); }
+.skb .ic img{ width:8.6mm; height:8.6mm; }
+.skb .k{ font-family:var(--sans); font-size:6.6pt; color:var(--gold);
+         letter-spacing:.12em; }
+.skb .n{ font-family:var(--serif); font-size:9.8pt; color:#f5f1ed; line-height:1.3; }
+.skb .bd{ font-size:7.2pt; line-height:1.52; color:var(--ink-2); }
+.skb .ln{ margin-bottom:.45mm; }
+.skb .kw{ color:#f0cd72; }
+
+/* 角色页底部的三张动画首帧 */
+.animrow{ display:grid; grid-template-columns:repeat(3,1fr); gap:3.6mm;
+          margin-top:auto; height:36mm; }
+.animrow figure{ margin:0; display:flex; flex-direction:column;
+                 align-items:center; justify-content:flex-end; min-height:0; }
+.animrow img{ max-height:30mm; max-width:100%; width:auto; height:auto;
+              object-fit:contain; }
+.animrow figcaption{ font-family:var(--sans); font-size:6.6pt; color:var(--mut);
+                     margin-top:1mm; letter-spacing:.06em; }
+
+/* ---------- 技能：详情 ---------- */
+.skdet .skblk{ padding:2.8mm 3.4mm; margin-bottom:3mm; background:var(--panel);
+               border:.18mm solid var(--line); border-left:.5mm solid var(--gold-dim); }
+.skdet .hd{ display:flex; gap:3mm; align-items:center;
+            border-bottom:.18mm solid var(--line);
+            padding-bottom:2mm; margin-bottom:2mm; }
+.skdet .ic{ width:13.6mm; height:13.6mm; flex:0 0 13.6mm; display:flex;
+            align-items:center; justify-content:center;
+            background:linear-gradient(140deg,#3a322e,#241f1e);
+            border:.18mm solid rgba(201,162,39,.20); }
+.skdet .ic img{ width:10.8mm; height:10.8mm; }
+.skdet .k{ font-family:var(--sans); font-size:7.2pt; color:var(--gold);
+           letter-spacing:.14em; }
+.skdet .n{ font-family:var(--serif); font-size:12pt; color:#f5f1ed; line-height:1.34; }
+.skdet .bd{ font-size:8.4pt; line-height:1.58; color:var(--ink-2); }
+.skdet .ln{ margin-bottom:.7mm; }
+.skdet .kw{ color:#f0cd72; }
+
+/* ---------- 皮肤 ---------- */
+/* 原来固定 116mm/套，一页最多 2 套，第 5 套只能单独占一页（底下空 153mm）。
+   改成按页内套数均分高度：2 套各 116mm，3 套各 ~78mm，页面始终排满。 */
+.skin{ display:flex; gap:6mm; margin-bottom:5mm; flex:1 1 0; min-height:0; }
+.skin .a{ flex:0 0 50%; display:flex; align-items:center; justify-content:center;
+          background:radial-gradient(72% 62% at 50% 42%,
+            rgba(201,162,39,.10) 0%, rgba(201,162,39,0) 70%),
+            linear-gradient(172deg,#312a27 0%,#241f1e 64%,#1a1615 100%);
+          border:.18mm solid rgba(201,162,39,.16); }
+.skin .a img{ max-width:100%; max-height:100%; width:auto; height:auto; }
+.skin .b{ flex:1; padding-top:1mm; }
+.skin h3{ font-family:var(--serif); font-size:15pt; color:#f5f1ed; margin-bottom:1mm; }
+.skin .en{ font-family:var(--sans); font-size:8pt; color:var(--gold);
+           letter-spacing:.24em; text-transform:uppercase; margin-bottom:3.4mm; }
+
+/* ---------- 图墙 ---------- */
+.wall2{ display:grid; grid-template-columns:1fr 1fr; gap:4mm; }
+.wall2 figure{ margin:0; }
+.wall2 img{ width:100%; }
+.wall2 figcaption{ font-family:var(--sans); font-size:7.6pt; color:var(--mut);
+                   margin-top:1mm; letter-spacing:.04em; }
+.wall3{ display:grid; grid-template-columns:repeat(3,1fr); gap:4mm 4mm; }
+.wall3 figure{ margin:0; }
+.wall3 img{ width:100%; }
+.wall3 figcaption{ font-family:var(--sans); font-size:7.2pt; color:var(--mut);
+                   margin-top:.8mm; letter-spacing:.04em; }
+/* 方图专用：2 列 × 3 行塞 6 张，单张 87×76mm，整页排满 */
+.wall6{ display:grid; grid-template-columns:1fr 1fr; gap:3.4mm 4mm; }
+.wall6 figure{ margin:0; }
+.wall6 img{ width:100%; height:74mm; object-fit:contain; background:#161211; }
+.wall6 figcaption{ font-family:var(--sans); font-size:7.4pt; color:var(--mut);
+                   margin-top:.8mm; letter-spacing:.04em; }
+/* 教学图：2 列 × 4 行，固定 56mm 高，8 张正好铺满一页 */
+.wallTut{ display:grid; grid-template-columns:1fr 1fr; gap:3.2mm 4mm; }
+.wallTut figure{ margin:0; }
+.wallTut img{ width:100%; height:52mm; object-fit:contain; background:#161211; }
+.wallTut figcaption{ font-family:var(--sans); font-size:7.2pt; color:var(--mut);
+                     margin-top:.6mm; letter-spacing:.04em; }
+.row5{ display:grid; grid-template-columns:repeat(5,1fr); gap:2mm; margin-top:3mm; }
+.row5 img{ width:100%; }
+/* 概览页的皮肤缩略带：固定高度，否则竖版立绘按 width:100% 撑高，整页溢出被裁 */
+.skinrow{ display:grid; grid-template-columns:repeat(5,1fr); gap:2.4mm; margin-top:1mm; }
+.skinrow figure{ margin:0; text-align:center; }
+.skinrow img{ width:100%; height:38mm; object-fit:contain; background:var(--bg-deep); }
+.skinrow figcaption{ font-family:var(--sans); font-size:6.8pt; color:var(--mut);
+                     margin-top:.8mm; line-height:1.3; }
+.row3{ display:grid; grid-template-columns:repeat(3,1fr); gap:4mm; margin-top:1mm; }
+.row3 figure{ margin:0; }
+.row3 img{ width:100%; height:46mm; object-fit:contain; background:var(--bg-deep); }
+.row3 figcaption{ font-family:var(--sans); font-size:7.2pt; color:var(--mut);
+                  margin-top:1mm; line-height:1.4; }
+.pair2{ display:grid; grid-template-columns:1fr 1fr; gap:5mm; margin-top:3mm; }
+.pair2 figure{ margin:0; text-align:center; }
+.pair2 img{ width:100%; height:52mm; object-fit:contain; background:var(--bg-deep); }
+.pair2 figcaption{ font-family:var(--sans); font-size:7.2pt; color:var(--mut);
+                   margin-top:1mm; line-height:1.45; }
+.row5 div.t{ font-family:var(--sans); font-size:7.2pt; color:var(--mut);
+            text-align:center; margin-top:.6mm; }
+.side4{ display:grid; grid-template-columns:repeat(4,1fr); gap:3mm; margin-top:4mm; }
+.side4 img{ width:100%; height:56mm; object-fit:contain; background:var(--bg-deep); }
+.side4 div.t{ font-family:var(--sans); font-size:7.2pt; color:var(--ink-2);
+             text-align:center; margin-top:1mm; line-height:1.35; }
 /* 大厅动画 9 套用 5 列（4 列会剩一个孤零零的尾图） */
-.side5 { display:grid; grid-template-columns:repeat(5,1fr); gap:2.4mm; margin-top:3.5mm; }
-.side5 img { width:100%; height:44mm; object-fit:contain; border-radius:1.5mm; background:#0e1116; }
-.side5 div.t { font-size:6.8pt; color:#4a5261; text-align:center; margin-top:.8mm; line-height:1.3; }
-.icons { display:grid; grid-template-columns:repeat(6,1fr); gap:2.4mm; }
-.icons figure { margin:0; text-align:center; }
-.icons img { width:100%; border-radius:1.6mm; background:#f5f7fc; }
-.icons figcaption { font-size:6.5pt; color:#8892a6; margin-top:.6mm;
-                    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.note { font-size:8.5pt; color:#7b8494; margin-top:3mm; }
-.tight th, .tight td { padding:1.0mm 1.5mm; }
-.stage th, .stage td { padding:0.7mm 1.3mm; }
-.nowrap { white-space:nowrap; }
+.side5{ display:grid; grid-template-columns:repeat(5,1fr); gap:2.4mm; margin-top:3.5mm; }
+.side5 img{ width:100%; height:44mm; object-fit:contain; background:var(--bg-deep); }
+.side5 div.t{ font-family:var(--sans); font-size:6.6pt; color:var(--ink-2);
+             text-align:center; margin-top:.8mm; line-height:1.3; }
+/* 15 个图标：6 列要 3 行（96mm），8 列只要 2 行（52mm），这页刚好差这 40mm */
+.icons{ display:grid; grid-template-columns:repeat(8,1fr); gap:2.2mm; }
+.icons figure{ margin:0; text-align:center; }
+.icons img{ width:100%; background:var(--panel); }
+.icons figcaption{ font-family:var(--sans); font-size:6.4pt; color:var(--mut);
+                   margin-top:.6mm; white-space:nowrap; overflow:hidden;
+                   text-overflow:ellipsis; }
+
+/* ---------- 说明块 ---------- */
+.note{ font-family:var(--sans); font-size:8pt; color:var(--mut);
+       margin-top:3mm; line-height:1.7; }
+.warn{ font-family:var(--sans); font-size:8.4pt; color:#e8c9a0; margin-top:3mm;
+       padding:2.6mm 3.2mm; background:rgba(201,162,39,.08);
+       border-left:.5mm solid rgba(201,162,39,.66); line-height:1.68; }
 
 /* 活动剧情清单：48 行拆成左右两栏，避免单表过长 */
-.two { display:flex; gap:5mm; align-items:flex-start; }
-.two > div { flex:1; min-width:0; }
-.act th, .act td { padding:.5mm 1.4mm; font-size:6.9pt; line-height:1.16; }
-.act td.n { text-align:right; font-family:Consolas,monospace; }
-.sample { font-size:7.2pt; line-height:1.52; background:#f7f9fd; border-left:1.2mm solid #3d5afe;
-          padding:2.4mm 3mm; white-space:pre-wrap; color:#39404f; border-radius:0 2mm 2mm 0; }
-/* 透视 / 装配件拆解 图格 */
-.p4 { display:grid; grid-template-columns:repeat(4,1fr); gap:2.4mm; }
-.p2 { display:grid; grid-template-columns:1fr 1fr; gap:3mm 4mm; }
-.p4 figure, .p2 figure { margin:0; text-align:center; }
-.p4 img { width:100%; height:44mm; object-fit:contain; border-radius:2mm;
-          background:linear-gradient(165deg,#6c7789,#59637a); }
-.p2 img { width:100%; height:45mm; object-fit:contain; border-radius:2mm; background:#f7f9fd; }
-.p4 figcaption, .p2 figcaption { font-size:7.3pt; color:#6b7488; margin-top:.7mm; }
-.p4 figcaption b, .p2 figcaption b { color:#26303f; }
+.two{ display:flex; gap:5mm; align-items:flex-start; }
+.two > div{ flex:1; min-width:0; }
+.act th,.act td{ padding:.46mm 1.4mm; font-size:6.8pt; line-height:1.16; }
+.act td.n{ text-align:right; font-family:Consolas,monospace; color:var(--gold); }
+.sample{ font-size:7.2pt; line-height:1.56; white-space:pre-wrap;
+         color:var(--ink-2); background:var(--panel);
+         border-left:.6mm solid var(--gold); padding:2.4mm 3.2mm; }
+
+/* ---------- 透视 / 装配件拆解 ---------- */
+.p4{ display:grid; grid-template-columns:repeat(4,1fr); gap:2.4mm; }
+.p2{ display:grid; grid-template-columns:1fr 1fr; gap:3mm 4mm; }
+.p4 figure,.p2 figure{ margin:0; text-align:center; }
+.p4 img{ width:100%; height:52mm; object-fit:contain;
+         background:linear-gradient(165deg,#3b3532,#2a2524); }
+.p2 img{ width:100%; height:58mm; object-fit:contain; background:var(--panel); }
+/* 8 张拆解图同页（2 列 × 4 行）时必须压到 42mm，否则整页溢出被裁 */
+.p2s img{ height:42mm; }
+.p4 figcaption,.p2 figcaption{ font-family:var(--sans); font-size:7.1pt;
+                               color:var(--mut); margin-top:.7mm; }
+.p4 figcaption b,.p2 figcaption b{ color:var(--ink); font-weight:600; }
 """
 
 
@@ -226,10 +409,16 @@ def pic(src: Path, maxh: int = 1500) -> Path:
     有不透明需求（立绘/小人）的留 PNG，纯实景图（场景还原）转 JPEG。
 
     缓存必须带源文件指纹：早期版本只按文件名缓存，导致源图重渲之后 PDF 里永远是旧图
-    （阵位图、莱彻总览图都踩过这个坑，症状是"改了脚本但画面没变"）。"""
+    （阵位图、莱彻总览图都踩过这个坑，症状是"改了脚本但画面没变"）。
+
+    缓存键必须带源路径哈希：2026-10-26 结构重排后，所有角色的立绘都收进
+    `角色/<dir>/立绘/`，父目录名统一是「立绘」。原来按 `父目录名/文件名` 做键，
+    三个角色的 半身像.png / 小人立绘.png 全部撞成同一个缓存文件——页面上三张卡
+    显示同一张图（最后生成的那张）。这里把源图绝对路径的短哈希拼进文件名。"""
     st = src.stat()
     stamp = f"{int(st.st_mtime)}:{st.st_size}"
-    out = CACHE / src.parent.name / f"{src.stem}.png"
+    tag = hashlib.md5(str(src.resolve()).encode("utf-8")).hexdigest()[:8]
+    out = CACHE / src.parent.name / f"{src.stem}.{tag}.png"
     outj = out.with_suffix(".jpg")
     stp = out.with_suffix(".stamp")
     if stp.exists() and stp.read_text() == stamp:
@@ -279,7 +468,8 @@ def best_art(d: Path) -> Path:
     真正分辨率最高的是 `小人立绘.png`（1800 高，全透明底、无图集留白），
     文件名的"小人"是采集阶段的遗留命名，画面就是同一张全身立绘，不是 Q 版。
     所以这里不按文件名判断，按实测像素面积取最大。"""
-    cand = [p for p in (d / "小人立绘.png", d / "立绘_高清.png") if p.exists()]
+    art = d / "立绘" if (d / "立绘").is_dir() else d      # 2026-10-26 结构重排：立绘进 立绘/
+    cand = [p for p in (art / "小人立绘.png", art / "立绘_高清.png") if p.exists()]
     if not cand:
         raise FileNotFoundError(d)
     def area(p: Path) -> int:
@@ -333,7 +523,7 @@ def load_skills():
             lines = render_desc(loc(rec["DescriptionLocalkey"].split(":")[-1]), vals)
             icon = ICON_SRC / (rec["Icon"] + ".png")
             if icon.exists():
-                dest = ROOT / "01_新角色" / c["dir"] / f"技能图标_{i + 1}_{typ or ('技能%d' % i)}.png"
+                dest = ROOT / "01_新角色&皮肤" / "角色" / c["dir"] / "技能" / f"技能图标_{i + 1}_{typ or ('技能%d' % i)}.png"
                 if not dest.exists():
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(icon, dest)
@@ -373,26 +563,49 @@ def short(text: str, n=62) -> str:
 
 
 def page_char(c) -> str:
-    d = ROOT / "01_新角色" / c["dir"]
-    # 概览只列「图标 + 类型 + 名称」，全文与 10 级数值放下一页，避免截断
-    rows = []
+    """单页角色卡：立绘 + 资料 + 三列技能全文 + 三张动画首帧。
+
+    2026-10-26 改版：原来拆成「立绘页 + 技能详情页」两页 —— 第二页纯文字、
+    底下空三分之一，读者还得翻页才能把角色和技能对上。合并成一页后
+    QUEEN 的三条技能（约 690 字）按 7.2pt 三列排实测 78mm，
+    页面余量正好够再放三张动画首帧（大厅 idle / 大厅 action / 爆裂特写），
+    剪影和动作也能一眼看到，不用去资源目录翻 GIF。
+    """
+    d = ROOT / "01_新角色&皮肤" / "角色" / c["dir"]
+
+    # 三列技能：图标 + 类型 + 名称 + 全文（不截断）
+    cols = []
     for s in c["skills"]:
         icon = f'<img src="{u(s["icon"])}">' if s["icon"] else ""
-        rows.append(f'<div class="row"><div class="ic">{icon}</div>'
-                    f'<div class="tx"><div class="k">{s["type"]}</div>'
-                    f'<div class="n">{s["name"]}</div></div></div>')
-    sk = "".join(rows)
+        body = "".join(f'<div class="ln">{x}</div>' for x in s["lines"])
+        cols.append(f"""
+<div class="skb">
+  <div class="hd"><div class="ic">{icon}</div>
+    <div><div class="k">{s['type']}</div><div class="n">{s['name']}</div></div></div>
+  <div class="bd">{body}</div>
+</div>""")
+    sk = "".join(cols)
+
     # 立绘只贴 1 张（分辨率最高的那张）；其余规格不重复贴图，只在页脚列文件名与尺寸
     art = best_art(d)
+    ad = d / "立绘" if (d / "立绘").is_dir() else d
     others = [x for x in ("立绘.png", "立绘_高清.png", "半身像.png", "小人立绘.png")
-              if (d / x).exists() and x != art.name]
+              if (ad / x).exists() and x != art.name]
     fl = f'本页立绘：<b>{art.name}</b>　{imgsize(art)}　（每名角色只贴这一张）'
     if others:
         fl += "<br>同目录其他规格（不重复贴图）：" + "　".join(
-            f'<b>{x}</b> {imgsize(d / x)}' for x in others)
+            f'<b>{x}</b> {imgsize(ad / x)}' for x in others)
+
+    # 动画首帧：目录里 *_首帧.png，最多取 3 张（idle / action / skillcut）
+    fr = sorted((d / "动画").glob("*_首帧.png"))[:3]
+    anim = "".join(
+        f'<figure><img src="{u(p)}"><figcaption>'
+        f'{p.stem.replace("_首帧", "").replace("_", " · ")}</figcaption></figure>'
+        for p in fr)
+
     return f"""
 <div class="page">
-  <div class="h2">新角色 · {c['name']}</div>
+  <div class="h2">新角色 · {c['name']} <small>立绘 + 技能全文 · 一页看完</small></div>
   <div class="charTop">
     <div class="art"><img src="{u(art)}"></div>
     <div class="info">
@@ -407,41 +620,23 @@ def page_char(c) -> str:
       <div class="files">{fl}</div>
     </div>
   </div>
-  <div class="skills">{sk}</div>
-</div>"""
-
-
-def page_skill_detail(c) -> str:
-    blocks = ""
-    for s in c["skills"]:
-        body = "".join(f'<div class="ln">{x}</div>' for x in s["lines"])
-        icon = f'<img src="{u(s["icon"])}">' if s["icon"] else ""
-        blocks += f"""
-<div class="skblk">
-  <div class="hd"><div class="ic">{icon}</div>
-    <div><div class="k">{s['type']}</div><div class="n">{s['name']}</div></div></div>
-  <div class="bd">{body}</div>
-</div>"""
-    return f"""
-<div class="page">
-  <div class="h2">技能详情 · {c['name']} <small>全部数值取 10 级</small></div>
-  <div class="lead">数值取客户端 SkillInfoTable 中 SkillLevel=10 的记录；文案为该条 DescriptionLocalkey 的官方中文，
-    {{description_value_01}} 一类占位符已按同一条记录的 DescriptionValueList 填入，全文不截断。</div>
-  <div class="skdet">{blocks}</div>
+  <div class="skcol">{sk}</div>
+  <div class="animrow">{anim}</div>
 </div>"""
 
 
 def page_skins(pair, idx, total) -> str:
     body = ""
     for s in pair:
-        d = ROOT / "02_新皮肤" / s["dir"]
+        d = ROOT / "01_新角色&皮肤" / "皮肤" / s["dir"]
         art = best_art(d)
+        ad = d / "立绘" if (d / "立绘").is_dir() else d
         others = [x for x in ("立绘.png", "立绘_高清.png", "半身像.png", "小人立绘.png")
-                  if (d / x).exists() and x != art.name]
+                  if (ad / x).exists() and x != art.name]
         fl = f'本页立绘：<b>{art.name}</b>　{imgsize(art)}'
         if others:
             fl += "<br>同目录其他规格（不重复贴图）：" + "　".join(
-                f'<b>{x}</b> {imgsize(d / x)}' for x in others)
+                f'<b>{x}</b> {imgsize(ad / x)}' for x in others)
         body += f"""
 <div class="skin">
   <div class="a"><img src="{u(art)}"></div>
@@ -518,24 +713,24 @@ def apply_brief(src: str) -> str:
 
 def main():
     load_skills()
-    act = ROOT / "03_活动" / "PERSONA ON FRONTLINE（ce009）"
-    illus = sorted((act / "剧情插画").glob("*.png"))
-    items = sorted((act / "活动道具与图标").glob("*.png"))
-    tuts = sorted((act / "活动教学图").glob("*.png"))
-    banners = [b for b in sorted((ROOT / "04_卡池横幅").glob("EVENT_BANNER_*.png"))
+    act = ROOT / "02_主线&活动" / "活动_PERSONA ON FRONTLINE（ce009）"
+    illus = sorted((act / "01_插画").glob("*.png"))
+    items = sorted((act / "04_图标与文本").glob("*.png"))
+    tuts = sorted((act / "03_玩法与奖励" / "教学图").glob("*.png"))
+    banners = [b for b in sorted((ROOT / "01_新角色&皮肤" / "卡池与活动横幅").glob("EVENT_BANNER_*.png"))
                if not b.name.endswith("_S.png")]
-    ml = ROOT / "05_主线_47-48章"
-    trail = [t for t in sorted((ml / "05_图片资源" / "章节预告图").glob("*.png"))
+    ml = ROOT / "02_主线&活动" / "主线_第47-48章"
+    trail = [t for t in sorted((ml / "02_剧情" / "章节预告图").glob("*.png"))
              if not t.name.endswith("_S.png")]
-    act_banner = act / "EVENT_BANNER_CE009.png"
+    act_banner = act / "01_插画" / "EVENT_BANNER_CE009.png"
 
     # 主线数据全部从 tsv 读，不在脚本里写数
     # 2026-10-25 目录重组：文件按类别进子目录，这里做名字 → 相对路径的映射
     SUB = {
-        "01_章节档案.tsv": "02_章节与关卡/01_章节档案.tsv",
-        "10_主线任务链.tsv": "02_章节与关卡/10_主线任务链.tsv",
-        "12_关卡坐标_47章.tsv": "03_地图与点位/12_关卡坐标_47章.tsv",
-        "13_关卡坐标_48章.tsv": "03_地图与点位/13_关卡坐标_48章.tsv",
+        "01_章节档案.tsv": "01_章节与关卡/01_章节档案.tsv",
+        "10_主线任务链.tsv": "01_章节与关卡/10_主线任务链.tsv",
+        "12_关卡坐标_47章.tsv": "03_地图/12_关卡坐标_47章.tsv",
+        "13_关卡坐标_48章.tsv": "03_地图/13_关卡坐标_48章.tsv",
     }
 
     def tsv(name):
@@ -563,34 +758,45 @@ def main():
     c48_first = first_stage("13_关卡坐标_48章.tsv")
 
     heroes = "".join(
-        f'<img src="{u(ROOT / "01_新角色" / c["dir"] / "小人立绘.png")}">' for c in CHARS)
+        f'<img src="{u(best_art(ROOT / "01_新角色&皮肤" / "角色" / c["dir"]))}">' for c in CHARS)
 
     overview = "".join(f"""
 <div class="card">
-  <img src="{u(ROOT / '01_新角色' / c['dir'] / '半身像.png')}" style="width:100%;height:60mm;object-fit:contain">
+  <img src="{u(ROOT / '01_新角色&皮肤' / '角色' / c['dir'] / '立绘' / '半身像.png')}" style="width:100%;height:60mm;object-fit:contain">
   <div class="nm">{c['name']}</div>
   <div class="en">{c['en']}</div>
   <div style="margin-top:1.5mm"><span class="tag {'ssr' if c['rare']=='SSR' else 'sr'}">{c['rare']}</span>
     <span class="tag">爆裂 {c['burst']}</span></div>
 </div>""" for c in CHARS)
 
+    # 概览页底部的皮肤缩略带（原来这页底下空 83mm，等于白扔三分之一页）
+    skin_thumbs = "".join(
+        f'<figure><img src="{u(best_art(ROOT / "01_新角色&皮肤" / "皮肤" / s["dir"]))}">'
+        f'<figcaption>{s["name"]}</figcaption></figure>' for s in SKINS)
+
+    # 剧情插画是 2048×2048 方图：一页只放 2 张时下面空 177mm，等于每页浪费三分之二。
+    # 改成 2 列 × 3 行 = 6 张/页，单张仍有 87×74mm，缩略图上也能认出画面。
     illus_pages = ""
-    for start in range(0, len(illus), 2):
-        chunk = illus[start:start + 2]
+    for start in range(0, len(illus), 6):
+        chunk = illus[start:start + 6]
+        # 尾页只剩 4 张时用 2 列（每张 87mm 见方）比塞进 6 格网格更满
+        cls = "wall6" if len(chunk) > 4 else "wall2"
         figs = "".join(
             f'<figure><img src="{u(p)}"><figcaption>剧情插画 {p.stem.split("_")[-1].replace("-", " / ")}'
-            f'　2048×2048</figcaption></figure>' for p in chunk)
+            f'　{imgsize(p)}</figcaption></figure>' for p in chunk)
         illus_pages += f"""
 <div class="page">
   <div class="h2">活动剧情插画 <small>{start+1}–{start+len(chunk)} / {len(illus)}</small></div>
-  <div class="wall2">{figs}</div>
+  <div class="{cls}">{figs}</div>
 </div>"""
 
     icon_figs = "".join(
         f'<figure><img src="{u(p)}"><figcaption>{p.stem}</figcaption></figure>' for p in items)
+    # 教学图 512×400，一页 4 张只占上半页（底下空 109mm）。改成 2 列 × 4 行 = 8 张/页，
+    # 单张 87mm 宽、56mm 高，箭头与按钮文字仍然清楚。
     tut_pages = ""
-    for start in range(0, len(tuts), 4):
-        chunk = tuts[start:start + 4]
+    for start in range(0, len(tuts), 8):
+        chunk = tuts[start:start + 8]
         figs = "".join(
             f'<figure><img src="{u(p)}"><figcaption>{p.stem.replace("ele_ce009_tutorial_", "教学图 ")}'
             f'</figcaption></figure>' for p in chunk)
@@ -598,11 +804,11 @@ def main():
 <div class="page">
   <div class="h2">活动教学图 <small>{start+1}–{start+len(chunk)} / {len(tuts)}</small></div>
   <div class="lead">活动玩法说明图，512×400 原图。</div>
-  <div class="wall2">{figs}</div>
+  <div class="wallTut">{figs}</div>
 </div>"""
 
     # ---- 战斗场景还原（从 spotbackground(hd) 包按实机相机透视投影重建）----
-    BS = ml / "06_战斗场景还原"
+    BS = ml / "04_战斗场景"
     ASM = Path(r"D:\Codex\临时\nikke_intl_20261029\out")
     battle_pages, battle_rows = "", ""
     for sh in sorted(BS.glob("*_总览.png")):
@@ -641,11 +847,16 @@ def main():
     {slot_rows}
   </table>
   <div class="note">同一套战场只换相机位置、朝向不变 —— 这正是游戏内换掩体时的镜头行为。
-    单张原图（1600×900）与充能点位明细见包内 <b>05_主线_47-48章/06_战斗场景还原/</b>。</div>
+    单张原图（1600×900）与充能点位明细见包内 <b>02_主线&活动/主线_第47-48章/04_战斗场景/</b>。</div>
 </div>"""
 
+    # 「数据边界」页底部并排放三套战场缩略（原来这页是纯文字，底下空 82mm）
+    bs_thumbs = "".join(
+        f'<figure><img src="{u(p)}"><figcaption>{p.stem.replace("_总览", "")}</figcaption></figure>'
+        for p in sorted(BS.glob("*_总览.png")))
+
     banner_figs = "".join(
-        f'<div style="margin-bottom:5mm"><img src="{u(p)}" style="width:100%;border-radius:2.5mm"></div>'
+        f'<div style="margin-bottom:4mm"><img src="{u(p)}" style="width:74%;margin:0 auto"></div>'
         for p in banners)
     trail_figs = "".join(
         f'<div style="margin-bottom:5mm"><img src="{u(p)}" style="width:100%;border-radius:2.5mm"></div>'
@@ -657,19 +868,19 @@ def main():
                 if l and not l.startswith("#")]
         return rows[0], rows[1:]
 
-    CHAPDIR = ml / "02_章节与关卡"
+    CHAPDIR = ml / "01_章节与关卡"
     _, stage_all = rtsv(CHAPDIR / "04_关卡信息总表.tsv")
     _, boss_rows = rtsv(CHAPDIR / "05_关底BOSS.tsv")
-    _, mon_rows = rtsv(ml / "07_关卡莱彻" / "关卡莱彻_清单.tsv")
-    _, mapmon_rows = rtsv(ml / "07_关卡莱彻" / "大地图莱彻_清单.tsv")
-    _, bossmon_rows = rtsv(ml / "07_关卡莱彻" / "关底BOSS_实测.tsv")
-    _, bgm_rows = rtsv(ml / "08_BGM" / "00_曲目表.tsv")
-    _, sk_rows = rtsv(ml / "07_关卡莱彻" / "关卡莱彻_技能.tsv")
+    _, mon_rows = rtsv(ml / "05_莱彻与BOSS" / "数据" / "关卡莱彻_清单.tsv")
+    _, mapmon_rows = rtsv(ml / "05_莱彻与BOSS" / "数据" / "大地图莱彻_清单.tsv")
+    _, bossmon_rows = rtsv(ml / "05_莱彻与BOSS" / "数据" / "关底BOSS_实测.tsv")
+    _, bgm_rows = rtsv(ml / "06_BGM" / "00_曲目表.tsv")
+    _, sk_rows = rtsv(ml / "05_莱彻与BOSS" / "数据" / "关卡莱彻_技能.tsv")
 
     # ---- 活动剧情清单（2026-10-25 十轮：三表合并后重做）----
     # 00_活动清单.tsv 列：活动名 / 条目数 / Main条目 / Sub条目 / 目录名
-    EV = ml / "04_剧情文本" / "活动剧情"
-    _, act_rows = rtsv(EV / "00_活动清单.tsv")
+    EV = ROOT / "02_主线&活动" / "00_往期活动索引"  # 往期 174 部已撤出本期，只留清单
+    _, act_rows = rtsv(EV / "往期活动清单.tsv")
     act_sorted = sorted(act_rows, key=lambda r: -int(r[1]))
     n_act = len(act_sorted)
     n_act_lines = sum(int(r[1]) for r in act_sorted)
@@ -688,7 +899,7 @@ def main():
 
     # 番外篇：本期不采（详见剧情页末尾的注释），所以这里不再读清单
 
-    TOP_N = 60            # 双栏只列前 60，其余在 tsv 里
+    TOP_N = 44            # 双栏只列前 44（合并成 1 页后 60 行会溢出），其余在 tsv 里
 
     def act_tbl(rows):
         body = "".join(f'<tr><td class="mono">{r[0]}</td><td class="n">{_i(r, 1):,}</td>'
@@ -706,19 +917,22 @@ def main():
                f'<div>{act_tbl(top[half:])}</div></div>')
 
     # 抽样：取 ce006（联动活动，体量适中的一部）的前 6 条，原样贴出
-    SAMP_ACT = "ce006"
+    # 2026-10-26：往期 174 部已撤出本期，抽样改成读**本期 ce009** 的简中全文（前 6 条）
+    SAMP_ACT = "ce009"
     samp_lines, nk = [], 0
-    for ln in (EV / SAMP_ACT / "简中.txt").read_text(encoding="utf-8-sig").splitlines()[4:]:
+    _samp_p = act / "02_剧情" / "简中.txt"
+    _all9 = _samp_p.read_text(encoding="utf-8-sig").splitlines() if _samp_p.exists() else []
+    for ln in _all9[4:]:
         if ln.startswith("["):
             if nk >= 6:
                 break
             nk += 1
         samp_lines.append(ln)
     samp_txt = "\n".join(samp_lines).strip().replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    samp_n = dict((r[0], r[1]) for r in act_rows)[SAMP_ACT]
+    samp_n = sum(1 for ln in _all9 if ln.startswith("[")) or len(_all9)
 
     # CE009 客户端下发的全部文本（无剧情对话，见包内 00_说明.md）
-    c9_rows = [l.split("\t") for l in (act / "非剧情文本_UI与告示牌" / "CE009_活动文本_全语言.tsv")
+    c9_rows = [l.split("\t") for l in (act / "04_图标与文本" / "CE009_活动文本_全语言.tsv")
                .read_text(encoding="utf-8-sig").splitlines()
                if l and not l.startswith("#")][1:]
     n_c9 = len(c9_rows)
@@ -777,7 +991,7 @@ def main():
                      f'<td class="mono"><b>{illus_cnt[c]}</b></td></tr>')
 
     # ---- 莱彻装配件可见性（读 diag_parts_visible.py 的产物）----
-    PARTS_TSV = ml / "07_关卡莱彻" / "装配件_可见性.tsv"
+    PARTS_TSV = ml / "05_莱彻与BOSS" / "数据" / "装配件_可见性.tsv"
     parts_rows = []
     if PARTS_TSV.exists():
         parts_rows = [l.split("\t") for l in
@@ -861,7 +1075,7 @@ def main():
             out.append(r)
         return out
 
-    BOSS_ART = ml / "07_关卡莱彻" / "立绘"
+    BOSS_ART = ml / "05_莱彻与BOSS" / "立绘"
     # 2026-10-25 三修：立绘统一改名成「序号_中文名_型号」，而 05_关底BOSS.tsv 第 5 列记的是
     # 关卡表里的 FieldMonsterId（47 章写 eea002），不是 BOSS 本体，所以按章直接映射。
     BOSS_ART_MAP = {"第 47 章": "13_安尼希利奥_xba003_1阶段.png",
@@ -951,7 +1165,7 @@ def main():
     下面 14 格是<b>正面正交</b>渲染的静帧（统一 1200×1400 画布，不是截图、不是手绘）：
     关卡内 8 + 大地图 6 − 两者共有的太阳 / 倒吊者 = <b>12 种</b>，再加两个关底 BOSS（这里各取 1 阶段）。
     下表只列关卡内的 8 种。</div>
-  <img src="{u(ml / '07_关卡莱彻' / '莱彻总览_14种.png')}"
+  <img src="{u(ml / '05_莱彻与BOSS' / '莱彻总览_14种.png')}"
        style="width:100%;max-height:126mm;object-fit:contain;border-radius:2.5mm">
   <table class="tight" style="margin-top:3mm;font-size:8.6pt;line-height:1.35">
     <tr><th style="width:12%">中文名</th><th style="width:18%">预制体</th>
@@ -998,7 +1212,7 @@ def main():
     ]:
         boss_cards += (
             f'<div style="flex:1">'
-            f'<img src="{u(ml / "07_关卡莱彻" / fn)}" '
+            f'<img src="{u(ml / "05_莱彻与BOSS" / "_源料" / "透视与拆解" / fn)}" '
             f'style="width:100%;border-radius:2mm">'
             f'<div style="font-size:7.6pt;line-height:1.3;margin-top:1.2mm;text-align:center">'
             f'<b>{t1}</b><br><span class="mono" style="color:#7b8494;font-size:7pt">{t2}</span></div></div>')
@@ -1082,13 +1296,22 @@ def main():
     <span class="mono">SoundCueData</span>，音频在 <span class="mono">_intro</span>（4.4 s）与
     <span class="mono">_loop</span>（113.5 s）两条里 —— 两段相加 117.9 s，与唱片机表登记的 118 s 对得上，
     所以表里标成「REBORN（前奏段 / 循环段）」。</div>
+  <div class="h3line">这些曲子响在哪 <small>两章大地图 + 一个战场</small></div>
+  <div class="row3">
+    <figure><img src="{u(ml / '03_地图' / '地图_47章.png')}">
+      <figcaption>第 47 章大地图 · 5 条 BGM 的触发范围</figcaption></figure>
+    <figure><img src="{u(ml / '03_地图' / '地图_48章.png')}">
+      <figcaption>第 48 章大地图 · 6 条 BGM 的触发范围</figcaption></figure>
+    <figure><img src="{u(ml / '04_战斗场景' / 'sbg_cityforest_001_总览.png')}">
+      <figcaption>战斗关卡场景 · 进关卡后切战斗曲</figcaption></figure>
+  </div>
 </div>"""
 
     # ---- 活动剧情文本 / 主线插画核对 / 莱彻装配件（2026-10-25 新增）----
-    ILL = ml / "05_图片资源" / "剧情插画"
+    ILL = ml / "02_剧情" / "剧情插画"
     # ce009 剧情抽样（前 6 条，简中原文）
     c9_story_lines, nk = [], 0
-    c9_txt_p = act / "剧情文本" / "简中.txt"
+    c9_txt_p = act / "02_剧情" / "简中.txt"
     if c9_txt_p.exists():
         for ln in c9_txt_p.read_text(encoding="utf-8-sig").splitlines()[4:]:
             if ln.startswith("["):
@@ -1099,6 +1322,14 @@ def main():
     c9_story = ("\n".join(c9_story_lines).strip()
                 .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
     c9_n = dict((r[0], r[1]) for r in act_rows).get("ce009", "0")
+
+    # 五语全文的实测字节与条目数（页面底部那张小表，数据全部现场读，不写死）
+    c9_lang_rows = ""
+    for p in sorted((act / "02_剧情").glob("*.txt")):
+        txt = p.read_text(encoding="utf-8-sig")
+        c9_lang_rows += (f'<tr><td>{p.stem}</td><td class="mono">{p.name}</td>'
+                         f'<td class="n">{p.stat().st_size:,}</td>'
+                         f'<td class="n">{sum(1 for l in txt.splitlines() if l.startswith("[")):,}</td></tr>')
 
     event_story_page = f"""
 <div class="page">
@@ -1122,10 +1353,7 @@ def main():
   <div class="note">上一版只查了 MainScenario，得到 48 部 / 89,750 条，并据此误判「CE009 没有剧情」。
     修正后活动数 <b>48 → {n_act}</b>，条目 <b>89,750 → {n_act_lines:,}</b>。
     五个语种（简中 / 繁中 / 日文 / 英文 / 韩文）都是客户端原文，未做机器翻译；缺译的条目整条跳过，不占位。</div>
-</div>
-
-<div class="page">
-  <div class="h2">活动剧情清单 <small>前 {len(top)} 部 · 按条目数排序</small></div>
+  <div class="h3line">活动清单 · 前 {len(top)} 部 <small>按条目数排序</small></div>
   {act_two}
   <div class="note">完整 {n_act} 部见 <span class="mono">00_活动清单.tsv</span>（含每部的 Main / Sub 分列与目录名）。
     「条目」= 一条 key 对应的文本，含对话、旁白与分支，不是"句数"。
@@ -1152,7 +1380,16 @@ def main():
     <span class="mono">CampaignStageTable</span> 查不到活动关卡、
     <span class="mono">ce009scenariocontroller</span> 包内无 TextAsset 三条去"佐证"——
     但这三条都只对单章活动成立，与多章活动无关。五语全文在
-    <b>03_活动/PERSONA ON FRONTLINE（ce009）/剧情文本/</b>（简中 255,974 B）。</div>
+    <b>02_主线&amp;活动/活动_PERSONA ON FRONTLINE（ce009）/02_剧情/</b>（简中 255,974 B）。</div>
+  <div class="h3line">五语全文 <small>同目录、同结构、逐条对齐</small></div>
+  <table class="tight" style="font-size:8.4pt">
+    <tr><th style="width:14%">语种</th><th style="width:24%">文件</th>
+        <th style="width:18%;text-align:right">字节</th>
+        <th style="text-align:right">条目</th></tr>
+    {c9_lang_rows}
+  </table>
+  <div class="note">条目数按「以 [ 开头的行」统计，与上方 {int(c9_n):,} 条的差异来自文件头注释行。
+    五语并非逐句对译 —— 英文、日文、韩文的换行位置各不相同，但 key 完全一致，可按 key 对齐。</div>
 </div>"""
 
     # ---- 番外篇：本期不采（2026-10-25 十五修）----
@@ -1165,8 +1402,23 @@ def main():
 
 
     # ---- 角色大厅站立动画（2026-10-25 十轮新增）----
-    LOB = ROOT / "06_角色大厅站立动画"
-    _, lob_rows = rtsv(LOB / "00_清单.tsv")
+    # 2026-10-26 结构重排：大厅动画不再单列顶层目录，按 <id>_<skin> 并进各角色/皮肤目录的 动画/
+    LOB = ROOT / "01_新角色&皮肤"
+    _, lob_rows = rtsv(LOB / "00_总览" / "大厅动画_清单.tsv")
+    LOB_HOME = {}
+    for _kind in ("角色", "皮肤", "_其他装扮"):
+        for _d in (LOB / _kind).glob("*"):
+            if not _d.is_dir():
+                continue
+            _m = re.search(r"_([a-z]{1,2}\d{3})(?:_(\d{2}))?(?=_|$)", _d.name)
+            if _m:
+                LOB_HOME[f"{_m.group(1)}_{_m.group(2) or '00'}"] = _d / "动画"
+
+    def lob_anim(dirname: str) -> Path:
+        """旧目录名 QUEEN（真）_c870_00_默认 -> 新 角色/QUEEN（真）_c870/动画"""
+        _m = re.search(r"_([a-z]{1,2}\d{3})(?:_(\d{2}))?(?=_|$)", dirname)
+        k = f"{_m.group(1)}_{_m.group(2) or '00'}" if _m else ""
+        return LOB_HOME.get(k, Path("__missing__"))
     lob_map = {}
     for r in lob_rows:                      # 目录 资源ID 角色 序号 时装 动画 尺寸 帧数 时长s 动幅% GIF_MB
         lob_map.setdefault(r[1], {"dir": r[0], "role": r[2], "idx": r[3],
@@ -1185,10 +1437,10 @@ def main():
                     f'<td class="n">{b[7] if b else "—"}</td><td class="n">{b[8] if b else "—"}</td></tr>')
 
     lob_thumbs = "".join(
-        f'<div><img src="{u(LOB / v["dir"] / (k + "_idle_首帧.png"))}">'
+        f'<div><img src="{u(lob_anim(v["dir"]) / "大厅_idle_首帧.png")}">'
         f'<div class="t">{v["role"]}<br><span style="color:#7a8496">{v["cos"]}</span></div></div>'
         for k, v in lob_map.items()
-        if (LOB / v["dir"] / (k + "_idle_首帧.png")).exists())
+        if (lob_anim(v["dir"]) / "大厅_idle_首帧.png").exists())
 
     lobby_page = f"""
 <div class="page">
@@ -1208,7 +1460,7 @@ def main():
   </table>
   <div class="side5">{lob_thumbs}</div>
   <div class="note">上排为各套 <b>idle</b> 首帧。完整一览见
-    <b>06_角色大厅站立动画/00_全角色一览.png</b>，逐帧参数见 <b>00_清单.tsv</b>。
+    <b>01_新角色&皮肤/00_总览/大厅动画_全角色一览.png</b>，逐帧参数见 <b>大厅动画_清单.tsv</b>。
     <b>idle</b> = 大厅里一直循环的站立待机；<b>action</b> = 点击角色触发的演出
     （QUEEN 唤摩托、埃癸斯开枪、雪子掩嘴笑、潘托姆甩裙摆等）。</div>
 </div>
@@ -1229,6 +1481,12 @@ def main():
     <span class="mono">action</span> 里摩托、弹壳、粒子会飞出很远，包围盒被撑爆，长边 1000 时角色只占画面约 <b>1/3</b>。
     做法：先按 <span class="mono">idle</span> 测包围盒定相机，再切到 <span class="mono">action</span> 且<b>不重测</b> ——
     这也正是游戏内换动作时镜头不动的行为。
+  </div>
+  <div class="pair2">
+    <figure><img src="{u(ROOT / '01_新角色&皮肤' / '角色' / '雪子_c871' / '动画' / '大厅_idle_首帧.png')}">
+      <figcaption>idle 首帧 · 相机按 idle 的包围盒定，角色占满画面</figcaption></figure>
+    <figure><img src="{u(ROOT / '01_新角色&皮肤' / '角色' / '雪子_c871' / '动画' / '大厅_action_首帧.png')}">
+      <figcaption>action 首帧 · 相机仍沿用 idle，所以没被扇子 / 道具挤小</figcaption></figure>
   </div>
   <h3 style="margin:4mm 0 2mm;font-size:11.5pt">成对动画 <span class="mono">X</span> / <span class="mono">X_02</span> 不一定是两套</h3>
   <table style="font-size:8.4pt;line-height:1.4">
@@ -1265,14 +1523,14 @@ def main():
   <div style="display:flex;gap:5mm;align-items:flex-start">
     <div style="flex:1;text-align:center">
       <img src="{u(ILL / '47章' / 'eventscene_chap_47_01.png')}"
-           style="width:100%;height:80mm;object-fit:contain;border-radius:2.5mm;background:#0f1420">
-      <div style="font-size:8pt;color:#4a5261;margin-top:1.5mm">
+           style="width:100%;height:104mm;object-fit:contain;background:#0f1420">
+      <div style="font-size:8pt;color:var(--mut);margin-top:1.5mm">
         <b>第 47 章 · 全部 {illus_cnt.get(47, 0)} 张</b>　红发角色在停机坪上腾空</div>
     </div>
     <div style="flex:1;text-align:center">
       <img src="{u(ILL / '00_48章_总览.png')}"
-           style="width:100%;height:80mm;object-fit:contain;border-radius:2.5mm;background:#f5f7fc">
-      <div style="font-size:8pt;color:#4a5261;margin-top:1.5mm">
+           style="width:100%;height:104mm;object-fit:contain;background:#f5f7fc">
+      <div style="font-size:8pt;color:var(--mut);margin-top:1.5mm">
         <b>第 48 章 · 全部 {illus_cnt.get(48, 0)} 张</b>　缩略图联系表</div>
     </div>
   </div>
@@ -1291,7 +1549,8 @@ def main():
     量级差得很远，但资源侧确实如此。</div>
 </div>"""
 
-    XR = ml / "07_关卡莱彻"
+    XRB = ml / "05_莱彻与BOSS" / "_源料" / "透视与拆解"
+    XR = XRB / "莱彻透视"
     # 立绘/透视 目录已统一为「序号_中文名_型号.png」，这里把型号映射过去
     TAG2FILE = {"xmg001": "01_指环_xmg001.png", "xma003": "02_海马_xma003.png",
                 "xeg006": "03_太阳_xeg006.png", "xea003": "04_倒吊者_xea003.png",
@@ -1311,13 +1570,13 @@ def main():
     {vis_tab}
   </table>
   <div class="p4" style="margin-top:4mm">{"".join(
-        f'<figure><img src="{u(XR / "透视" / TAG2FILE[t])}">'
+        f'<figure><img src="{u(XR / TAG2FILE[t])}">'
         f'<figcaption><b>{t}</b></figcaption></figure>'
         for t in ("xmg001", "xma003", "xeg006", "xea003", "eea002", "mea001", "meg006", "mmg005"))}</div>
   <div class="note">上面 8 张是<b>透视图</b>：外壳（<span class="mono">*_body</span> / <span class="mono">*_legs</span>）
     按 22% 不透明度绘制在深色底上，内部件正常绘制，被外壳挡住的核心与框架因此能看清结构。
     <b>半透明是渲染手法，不是原始材质。</b>全部 14 个型号的透视图在
-    <span class="mono">07_关卡莱彻/透视/</span>，配 <span class="mono">核心件清单.tsv</span> 说明谁有核心几何件。<br>
+    <span class="mono">05_莱彻与BOSS/_源料/透视与拆解/莱彻透视/</span>，配 <span class="mono">核心件清单.tsv</span> 说明谁有核心几何件。<br>
     为什么不能还原"关卡内"姿态：模型包里那 19 个 clip 的
     <span class="mono">m_FloatCurves</span> / <span class="mono">m_PositionCurves</span> /
     <span class="mono">m_EulerCurves</span> 确实全为 0 条 —— 但<b>动画数据没被剥离，在另一个包里</b>：
@@ -1332,14 +1591,14 @@ def main():
   <div class="h2">关卡莱彻 · 装配件拆解 <small>每个件单独一张，标注名称 / 顶点 / 材质 / 可见像素</small></div>
   <div class="lead">同一批模型，把每个装配件单独渲染成一格，标注该件在正常立绘里的最终可见像素。
     和立绘用同一套「远→近排序 + 朝向归一」规则，所以格子里的件和立绘上的件是同一个朝向。</div>
-  <div class="p2">{"".join(
-        f'<figure><img src="{u(XR / "装配件拆解" / (t + "_拆解.png"))}">'
+  <div class="p2 p2s">{"".join(
+        f'<figure><img src="{u(XRB / "装配件拆解" / (t + "_拆解.png"))}">'
         f'<figcaption><b>{t}</b>　{mon_stat.get(t, {}).get("n", 0)} 件'
         + (f'　核心 {mon_stat[t]["corepct"]}%' if mon_stat.get(t, {}).get("core") else "　无核心件")
         + '</figcaption></figure>'
         for t in ("xmg001", "xma003", "xeg006", "xea003", "eea002", "mea001", "meg006", "mmg005"))}</div>
   <div class="note">逐件明细（顶点 / 三角 / 可见像素 / 占画面比 / 被 alpha 砍掉的像素）落在
-    <b>05_主线_47-48章/07_关卡莱彻/装配件_可见性.tsv</b>，32 行，全部由
+    <b>02_主线&活动/主线_第47-48章/05_莱彻与BOSS/数据/装配件_可见性.tsv</b>，32 行，全部由
     <span class="mono">diag_parts_visible.py</span> 实测生成。<br>
     顺带修掉了渲染器两处会吃掉细节的地方：<b>alpha 测试阈值 0.35 → 0.02</b>
     （原阈值把半透明发光层整片砍掉，xmg001 因此丢 23,476 px、meg006 腿部丢 35,878 px）；
@@ -1355,12 +1614,12 @@ def main():
     从 <b>MonsterPartsTable</b>（715 行）读出 <b>IsPartsDamageAble</b> / <b>VisibleHp</b> /
     <b>HpRatio</b> 三个字段，再逐件渲染成透视格 —— 目标件原色、其余幽灵化，
     右下角小图红框标出它在全身的位置。</div>
-  <img src="{u(ml / '07_关卡莱彻' / '零件透视' / 'xba003_1phase_零件透视.png')}"
+  <img src="{u(ml / '05_莱彻与BOSS' / '_源料' / '透视与拆解' / '零件透视' / 'xba003_1phase_零件透视.png')}"
        style="width:100%;max-height:40mm;object-fit:contain;border-radius:2.5mm">
-  <div style="font-size:7.6pt;color:#6b7488;text-align:center;margin:.6mm 0 1.6mm">
-    <b style="color:#26303f">安尼希利奥 · 1 阶段</b>　6 个可见件
+  <div style="font-size:7.6pt;color:var(--mut);text-align:center;margin:.6mm 0 1.6mm">
+    <b style="color:var(--ink)">安尼希利奥 · 1 阶段</b>　6 个可见件
   </div>
-  <img src="{u(ml / '07_关卡莱彻' / '零件透视' / 'xba003_2phase_零件透视.png')}"
+  <img src="{u(ml / '05_莱彻与BOSS' / '_源料' / '透视与拆解' / '零件透视' / 'xba003_2phase_零件透视.png')}"
        style="width:100%;max-height:96mm;object-fit:contain;border-radius:2.5mm">
   <div class="note">47 章安尼希利奥共 <b>23 行</b>判定：主体 + <b>小矮人的箱子 I~IV</b>（HP 100）+
     <b>魔女的乌鸦 I~V</b>（HP 150）+ <b>12 个「屠杀的回路」判定盒</b> ——
@@ -1395,9 +1654,9 @@ def main():
     取景是单独算的：登场/战败动画位移很大（莉贝雷利奥战败是环状部件炸开，
     包络是绑定姿态的 29 倍），按绑定姿态定的镜头会让模型跑出画面，
     所以逐帧做蒙皮算出<b>稳健包络</b>（顶点中位数中心 + 92 分位半径）另存一份取景表。<br>
-    glb 共 16 个（12 条动画 + 4 个 idle）在 <b>07_关卡莱彻/3D查看器/models/</b>，
+    glb 共 16 个（12 条动画 + 4 个 idle）在 <b>（3D 查看器已上线，本地不再存 70 MB 的 glb）</b>，
     可用查看器的 <span class="mono">?glb=</span> 参数点名加载；GIF 在同一目录上一级的 <b>动图/</b>。</div>
-  <img src="{u(ml / '07_关卡莱彻' / '动图' / '00_预览.png')}"
+  <img src="{u(ml / '05_莱彻与BOSS' / '动图' / '00_预览.png')}"
        style="width:100%;max-height:148mm;object-fit:contain;border-radius:2.5mm">
 </div>"""
 
@@ -1409,39 +1668,39 @@ def main():
     <b>特效层</b>（粒子）/ <b>过渡层</b>（淡入淡出）/ <b>音频层</b>。
     三套各补齐 15 / 42 / 27 张贴图，并出分层时序甘特图，另各出一条 GIF。
     注意每角色<b>只有 1 个爆裂包</b>（同角色多套时装共用），与大厅站立「每时装一份」不同。</div>
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:3mm;margin-top:2mm">
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:3mm;margin-top:2mm;align-items:center">
     <figure style="margin:0;text-align:center">
-      <img src="{u(ROOT / '07_角色爆裂特写' / 'QUEEN（真）_c870' / 'c870_00_skillcut_首帧.png')}"
+      <img src="{u(ROOT / '01_新角色&皮肤' / '角色' / 'QUEEN（真）_c870' / '动画' / '爆裂_skillcut_首帧.png')}"
            style="width:100%;height:88mm;object-fit:contain;border-radius:2mm;background:#0e1116">
-      <figcaption style="font-size:7.3pt;color:#6b7488;margin-top:.7mm">
-        <b style="color:#26303f">QUEEN（真）</b>　c870 · 53 帧 · 3.71 s</figcaption></figure>
+      <figcaption style="font-size:7.3pt;color:var(--mut);margin-top:.7mm">
+        <b style="color:var(--ink)">QUEEN（真）</b>　c870 · 53 帧 · 3.71 s</figcaption></figure>
     <figure style="margin:0;text-align:center">
-      <img src="{u(ROOT / '07_角色爆裂特写' / '雪子_c871' / 'c871_00_skillcut_首帧.png')}"
+      <img src="{u(ROOT / '01_新角色&皮肤' / '角色' / '雪子_c871' / '动画' / '爆裂_skillcut_首帧.png')}"
            style="width:100%;height:88mm;object-fit:contain;border-radius:2mm;background:#0e1116">
-      <figcaption style="font-size:7.3pt;color:#6b7488;margin-top:.7mm">
-        <b style="color:#26303f">雪子</b>　c871 · 49 帧 · 3.43 s</figcaption></figure>
+      <figcaption style="font-size:7.3pt;color:var(--mut);margin-top:.7mm">
+        <b style="color:var(--ink)">雪子</b>　c871 · 49 帧 · 3.43 s</figcaption></figure>
     <figure style="margin:0;text-align:center">
-      <img src="{u(ROOT / '07_角色爆裂特写' / '埃癸斯_c872' / 'c872_00_skillcut_首帧.png')}"
+      <img src="{u(ROOT / '01_新角色&皮肤' / '角色' / '埃癸斯_c872' / '动画' / '爆裂_skillcut_首帧.png')}"
            style="width:100%;height:88mm;object-fit:contain;border-radius:2mm;background:#0e1116">
-      <figcaption style="font-size:7.3pt;color:#6b7488;margin-top:.7mm">
-        <b style="color:#26303f">埃癸斯</b>　c872 · 59 帧 · 4.13 s</figcaption></figure>
+      <figcaption style="font-size:7.3pt;color:var(--mut);margin-top:.7mm">
+        <b style="color:var(--ink)">埃癸斯</b>　c872 · 59 帧 · 4.13 s</figcaption></figure>
   </div>
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:3mm;margin-top:2.5mm">
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:3mm;margin-top:2.5mm;align-items:center">
     <figure style="margin:0;text-align:center">
-      <img src="{u(ROOT / '07_角色爆裂特写' / 'QUEEN（真）_c870' / '分层时序.png')}"
-           style="width:100%;height:62mm;object-fit:contain;border-radius:2mm;background:#f7f9fd">
-      <figcaption style="font-size:7.3pt;color:#6b7488;margin-top:.7mm">
-        <b style="color:#26303f">c870</b>　45 条分层轨道</figcaption></figure>
+      <img src="{u(ROOT / '01_新角色&皮肤' / '角色' / 'QUEEN（真）_c870' / '_源料' / '时序' / '分层时序.png')}"
+           style="width:100%;height:62mm;object-fit:contain;border-radius:2mm;background:#161211">
+      <figcaption style="font-size:7.3pt;color:var(--mut);margin-top:.7mm">
+        <b style="color:var(--ink)">c870</b>　45 条分层轨道</figcaption></figure>
     <figure style="margin:0;text-align:center">
-      <img src="{u(ROOT / '07_角色爆裂特写' / '雪子_c871' / '分层时序.png')}"
-           style="width:100%;height:62mm;object-fit:contain;border-radius:2mm;background:#f7f9fd">
-      <figcaption style="font-size:7.3pt;color:#6b7488;margin-top:.7mm">
-        <b style="color:#26303f">c871</b>　64 条</figcaption></figure>
+      <img src="{u(ROOT / '01_新角色&皮肤' / '角色' / '雪子_c871' / '_源料' / '时序' / '分层时序.png')}"
+           style="width:100%;height:62mm;object-fit:contain;border-radius:2mm;background:#161211">
+      <figcaption style="font-size:7.3pt;color:var(--mut);margin-top:.7mm">
+        <b style="color:var(--ink)">c871</b>　64 条</figcaption></figure>
     <figure style="margin:0;text-align:center">
-      <img src="{u(ROOT / '07_角色爆裂特写' / '埃癸斯_c872' / '分层时序.png')}"
-           style="width:100%;height:62mm;object-fit:contain;border-radius:2mm;background:#f7f9fd">
-      <figcaption style="font-size:7.3pt;color:#6b7488;margin-top:.7mm">
-        <b style="color:#26303f">c872</b>　42 条</figcaption></figure>
+      <img src="{u(ROOT / '01_新角色&皮肤' / '角色' / '埃癸斯_c872' / '_源料' / '时序' / '分层时序.png')}"
+           style="width:100%;height:62mm;object-fit:contain;border-radius:2mm;background:#161211">
+      <figcaption style="font-size:7.3pt;color:var(--mut);margin-top:.7mm">
+        <b style="color:var(--ink)">c872</b>　42 条</figcaption></figure>
   </div>
   <div class="note"><b>「做不到能播的动画」这句已经作废。</b>上一版只看了 Timeline 轨道就下了结论，
     回头打开骨架才发现 <span class="mono">skillcut</span> 动画一直在包里。
@@ -1476,11 +1735,11 @@ def main():
     <span class="mono">m_ClipBindingConstant.genericBindings</span> 里的 <b>278~873 条 generic 曲线</b>
     （pos / rot / scale），本来就是骨骼 local TRS，不需要过肌肉映射。</div>
   <div class="p4">{"".join(
-        f'<figure><img src="{u(XR / "立绘_idle" / fn)}"><figcaption>{cap}</figcaption></figure>'
+        f'<figure><img src="{u(XRB / "立绘_idle" / fn)}"><figcaption>{cap}</figcaption></figure>'
         for fn, cap in zip(IDLE_FILES, IDLE_CAP))}</div>
-  <figure style="margin:3mm 0 0"><img src="{u(XR / "莉贝雷利奥躯体_1阶段_idle对照.png")}"
-    style="width:100%;height:54mm;object-fit:contain;border-radius:2mm;background:#f7f9fd">
-    <figcaption style="font-size:7.3pt;color:#6b7488;margin-top:.7mm">48 章 1 阶段：左一为绑定姿态，后三张为 idle 第 0 / 51 / 101 帧。
+  <figure style="margin:3mm 0 0"><img src="{u(XRB / "莉贝雷利奥躯体_1阶段_idle对照.png")}"
+    style="width:100%;height:54mm;object-fit:contain;border-radius:2mm;background:#161211">
+    <figcaption style="font-size:7.3pt;color:var(--mut);margin-top:.7mm">48 章 1 阶段：左一为绑定姿态，后三张为 idle 第 0 / 51 / 101 帧。
       下沿 6 条缆绳在绑定姿态里是<b>笔直</b>的，idle 里是自然下垂的弧线</figcaption></figure>
   <div class="note">展开方式（实测反推）：<span class="mono">genericBindings[i]</span> 给出
     <b>(path hash, attribute)</b>，attribute 1=pos(3 float)、2=rot(4 float)、3=scale(3 float)；
@@ -1516,7 +1775,7 @@ def main():
     —— 打开就是 3D 查看器，左侧选模型、下方选动画；数据全部同源打包，
     不依赖任何第三方 CDN，断网也能用（把仓库 zip 下来双击 <span class="mono">index.html</span> 即可）。</div>
   <div class="p4">{"".join(
-        f'<figure><img src="{u(XR / "3D查看器" / "截图" / fn)}"><figcaption>{cap}</figcaption></figure>'
+        f'<figure><img src="{u(XRB / "3D查看器截图" / fn)}"><figcaption>{cap}</figcaption></figure>'
         for fn, cap in zip(
             ["查看器_安尼希利奥_1阶段.png", "查看器_安尼希利奥_2阶段.png",
              "查看器_莉贝雷利奥_1阶段.png", "查看器_莉贝雷利奥_2阶段.png"],
@@ -1579,15 +1838,15 @@ def main():
     <tr><td><b>卡池横幅</b></td><td>5 组（2 个角色卡池 · 1 个时装卡池 · 2 个活动 PASS）</td></tr>
     <tr><td><b>剧情插画</b></td><td>8 张，2048×2048 高清原图</td></tr>
   </table>
-  <div style="margin-top:8mm" class="grid3">{overview}</div>
-  <div class="note">※ 同一角色的不同服装按「皮肤」单独收录，与角色卡分开存放。</div>
+  <div style="margin-top:6mm" class="grid3">{overview}</div>
+  <div class="h3line">本期新皮肤 <small>5 套 · 立绘缩略</small></div>
+  <div class="skinrow">{skin_thumbs}</div>  <div class="note">※ 同一角色的不同服装按「皮肤」单独收录，与角色卡分开存放。</div>
 </div>
 
-{"".join(page_char(c) + page_skill_detail(c) for c in CHARS)}
+{"".join(page_char(c) for c in CHARS)}
 
-{page_skins(SKINS[0:2], 1, len(SKINS))}
-{page_skins(SKINS[2:4], 3, len(SKINS))}
-{page_skins(SKINS[4:5], 5, len(SKINS))}
+{page_skins(SKINS[0:3], 1, len(SKINS))}
+{page_skins(SKINS[3:5], 4, len(SKINS))}
 
 <div class="page">
   <div class="h2">活动 · PERSONA ON FRONTLINE</div>
@@ -1616,7 +1875,7 @@ def main():
     <span class="mono">Locale_SubScenario</span>，共 <b>{int(c9_n):,} 条</b>，已在前面「CE009 更正」页给出抽样与全文位置。
     本页只讲<b>非剧情文本</b>：<span class="mono">Locale_Event</span> 里的 {n_c9} 条全是活动 UI / 告示牌 / 场地状态提示，
     它们<b>不是</b>剧情对话，单独成表。
-    {n_c9} 条见包内 <b>03_活动/PERSONA ON FRONTLINE（ce009）/非剧情文本_UI与告示牌/</b>。</div>
+    {n_c9} 条见包内 <b>02_主线&活动/活动_PERSONA ON FRONTLINE（ce009）/04_图标与文本/</b>。</div>
   <table class="tight" style="margin-top:3mm;font-size:8.4pt;line-height:1.3">
     <tr><th style="width:22%">这 {n_c9} 条文本的分类</th><th style="width:10%">条数</th>
         <th>举例（简中原文）</th></tr>
@@ -1627,38 +1886,31 @@ def main():
 {illus_pages}
 
 <div class="page">
-  <div class="h2">活动奖励 · 大厅动画 <small>LiveWallpaper 97</small></div>
+  <div class="h2">活动奖励 · 大厅动画与道具图标 <small>LiveWallpaper 97 + {len(items)} 个图标</small></div>
   <div class="lead">本期活动能拿到的唯一「带画面」的奖励 —— 大厅动态壁纸 PERSONA ON FRONTLINE。
     画面取自客户端 spine/events/eventscene_ce009_01，奖励图标取自 icons-livewallpaper(hd)。</div>
   <div style="display:flex;gap:7mm;align-items:flex-start">
-    <div style="flex:0 0 58%"><img src="{u(act / '大厅动画' / '大厅动画_主图_1000x1000.png')}"
-      style="width:100%;border-radius:2.5mm;background:#0f1420"></div>
+    <div style="flex:0 0 50%"><img src="{u(act / '03_玩法与奖励' / '大厅动画' / '大厅动画_主图_1000x1000.png')}"
+      style="width:100%"></div>
     <div style="flex:1;text-align:center">
-      <img src="{u(act / '大厅动画' / '大厅动画_奖励图标_256x512.png')}"
-           style="width:52mm;border-radius:2.5mm;margin:0 auto">
+      <img src="{u(act / '03_玩法与奖励' / '大厅动画' / '大厅动画_奖励图标_256x512.png')}"
+           style="width:50mm;margin:0 auto">
       <div class="note" style="margin-top:2mm">奖励图标 256×512</div>
     </div>
   </div>
-  <table style="margin-top:5mm;font-size:9pt">
-    <tr><th style="width:20%">项目</th><th>值</th></tr>
-    <tr><td>奖励名</td><td>PERSONA ON FRONTLINE</td></tr>
-    <tr><td>类型</td><td>动态壁纸（LiveWallpaper）</td></tr>
-    <tr><td>ID</td><td>97</td></tr>
-    <tr><td>资源</td><td class="mono">livewallpaper/EventScene_ce009_01</td></tr>
-    <tr><td>获取</td><td>「PERSONA ON FRONTLINE」活动内获得</td></tr>
-    <tr><td>主图尺寸</td><td>1000×1000（图集页 1024，有效画面 1000）</td></tr>
+  <table style="margin-top:4mm;font-size:8.6pt;line-height:1.3">
+    <tr><th style="width:18%">项目</th><th style="width:32%">值</th>
+        <th style="width:18%">项目</th><th>值</th></tr>
+    <tr><td>奖励名</td><td>PERSONA ON FRONTLINE</td><td>类型</td><td>动态壁纸（LiveWallpaper）</td></tr>
+    <tr><td>ID</td><td>97</td><td>资源</td>
+        <td class="mono">livewallpaper/EventScene_ce009_01</td></tr>
+    <tr><td>获取</td><td>活动内获得</td><td>主图尺寸</td><td>1000×1000（图集页 1024，有效画面 1000）</td></tr>
   </table>
-  <div class="note">包内另有 128×128 小图标；主图与两张图标都在
-    <b>03_活动/PERSONA ON FRONTLINE（ce009）/大厅动画/</b>，
-    活动收益表单 <b>6_其他产出</b> 页也已把这些图一并附上。</div>
-</div>
-
-<div class="page">
-  <div class="h2">活动道具与图标 <small>{len(items)} 张</small></div>
-  <div class="lead">活动内使用的道具、增益与技能图标，均为 256×256。</div>
+  <div class="h3line">活动内道具与图标 <small>{len(items)} 张 · 均为 256×256</small></div>
   <div class="icons">{icon_figs}</div>
   <div class="note">从左上到右下依次为：活动道具（金币、炸弹、医疗包、道具箱、特殊卡）、
-    增益图标、三名联动角色的技能图标、敌人立绘。</div>
+    增益图标、三名联动角色的技能图标、敌人立绘。主图与两张图标都在
+    <b>02_主线&amp;活动/活动_PERSONA ON FRONTLINE（ce009）/03_玩法与奖励/大厅动画/</b>。</div>
 </div>
 
 {tut_pages}
@@ -1694,7 +1946,7 @@ def main():
 <div class="page">
   <div class="h2">第 47 章地图 <small>开战 · 从客户端还原</small></div>
   <div class="lead">不是示意图。地图取自客户端地形与图集，点位坐标是游戏内真实世界坐标，叠上去天生对齐。</div>
-  <img src="{u(ml / '03_地图与点位' / '大地图' / '地图_47章.png')}" style="width:100%;max-height:168mm;object-fit:contain;border-radius:2.5mm">
+  <img src="{u(ml / '03_地图' / '地图_47章.png')}" style="width:100%;max-height:168mm;object-fit:contain;border-radius:2.5mm">
   <table style="margin-top:2mm;font-size:9pt;line-height:1.4">
     <tr><th style="width:24%">项目</th><th>值</th></tr>
     <tr><td>世界范围</td><td>X −95.2 ~ 96.4 ／ Z −84.3 ~ 84.3</td></tr>
@@ -1707,14 +1959,14 @@ def main():
 <div class="page">
   <div class="h2">第 48 章地图 <small>重生 · 从客户端还原</small></div>
   <div class="lead">同一套坐标系，与 47 章无缝衔接。地图边界更靠外，主战场在东南侧的工业区。</div>
-  <img src="{u(ml / '03_地图与点位' / '大地图' / '地图_48章.png')}" style="width:100%;max-height:168mm;object-fit:contain;border-radius:2.5mm">
+  <img src="{u(ml / '03_地图' / '地图_48章.png')}" style="width:100%;max-height:168mm;object-fit:contain;border-radius:2.5mm">
   <table style="margin-top:2mm;font-size:9pt;line-height:1.4">
     <tr><th style="width:24%">项目</th><th>值</th></tr>
     <tr><td>世界范围</td><td>X −99.3 ~ 99.3 ／ Z −92.5 ~ 92.5</td></tr>
     <tr><td>点位匹配</td><td><b>66 / 66</b>，零缺失（46 关 · 13 宝箱 · 门 1 · 传送门 2 · 触发器 1 · 出生点 1 · 镜头点 1）</td></tr>
     <tr><td>第一关坐标</td><td>{c48_first}</td></tr>
   </table>
-  <div class="note">完整坐标见包内 <b>03_地图与点位/06·07_大地图点位_*.tsv</b>（全部实体）与 <b>12·13_关卡坐标_*.tsv</b>（46 关）。</div>
+  <div class="note">完整坐标见包内 <b>03_地图/06·07_大地图点位_*.tsv</b>（全部实体）与 <b>12·13_关卡坐标_*.tsv</b>（46 关）。</div>
 </div>
 
 {battle_pages}
@@ -1735,12 +1987,14 @@ def main():
       地面街区 3（就是前面还原的 001/002/003）、空中 1、地下 10、地下·水晶区 8、地下·电梯区 8、
       水晶区 1、eba001 专属 1、eba002 / 轨道电梯专属 1。<b>本机设备缓存只落到了地面那 3 个包</b>，
       其余 30 个没下发到设备，所以没有还原 —— 不是只有三种。完整清单见
-      <b>06_战斗场景还原/战场背景_键清单.tsv</b></td></tr>
+      <b>04_战斗场景/战场背景_键清单.tsv</b></td></tr>
     <tr><td>活动时间</td><td>FieldItemTable 55033101 起 111 条 ObtainLocation=10033 的道具，
       SpawnTime 2026-08-12T20:00:00Z → DespawnTime 2026-09-09T19:59:59Z</td></tr>
   </table>
+  <div class="h3line">三套战场并排 <small>同一区域的不同剖面，也是前面三页的缩略</small></div>
+  <div class="row3">{bs_thumbs}</div>
   <h3 style="margin:5mm 0 2mm;font-size:12.5pt">不能证实的</h3>
-  <div style="font-size:9pt;line-height:1.55;color:#4a5261">
+  <div style="font-size:9pt;line-height:1.55;color:var(--mut)">
     客户端里没有任何一张表把「某一关」直接指向「某一套 sbg 背景」：
     CampaignStageTable 没有背景字段，全客户端唯一带 <b>Bg</b> 字段的是 TowerTable（爬塔用）；
     spotbackground(hd) 的 174 个键也不带章节标签。所以 <b>哪个关卡用 001、哪个用 003，无法从文件里确定</b>，
@@ -1783,7 +2037,7 @@ def main():
 
 <div class="page">
   <div class="h2">本包收录了什么</div>
-  <table class="tight" style="font-size:8.1pt;line-height:1.4">
+  <table class="tight" style="font-size:7.4pt;line-height:1.32">
     <tr><th style="width:32%">类别</th><th style="width:12%">数量</th><th>说明</th></tr>
     <tr><td>主线 · 章节与剧情</td><td>2 章</td><td>章名 / 98 关 / 收集品 39 件 / 剧情全文 3 语言</td></tr>
     <tr><td>主线 · 章节预告图</td><td>2</td><td>官方 47:48 新章预告</td></tr>
@@ -1825,6 +2079,10 @@ def main():
   </div>
 </div>
 """
+    # 满出血版式里所有图都是直角，41 处内联 border-radius 散在各个页构造函数里，
+    # 逐个改容易漏；这里统一在出 HTML 前削掉，顺手把留下的 ";;" 收敛成一个。
+    html = re.sub(r";?\s*border-radius:[0-9.]+mm", "", html)
+    html = html.replace(";;", ";")
     if BRIEF:
         html = apply_brief(html)
     HTML_OUT.write_text(html, encoding="utf-8")

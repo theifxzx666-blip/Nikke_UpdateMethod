@@ -25,8 +25,8 @@ from UnityPy.helpers.MeshHelper import MeshHandler
 import render_monster_standee as R
 
 DEV = Path(r"D:\Codex\临时\nikke_intl_20261029\device")
-SD = Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\02_Skills\mpdump\out")
-LSS = Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\00_资源库\文本\原始文本库_lss\Locale_Monster.lss")
+SD = Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\02_Skills\mpdump\out")
+LSS = Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\00_资源库\文本\原始文本库_lss\Locale_Monster.lss")
 OUT = Path(r"D:\Codex\临时\nikke_intl_20261029\out\boss_parts_xray")
 
 TARGETS = [

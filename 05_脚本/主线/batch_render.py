@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.insert(0, r"D:\Codex\临时\spine_js")
 from render_spine import render  # noqa: E402
 
-SPINE = Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\00_资源库\Spine\待机")
+SPINE = Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\00_资源库\Spine\待机")
 OUT = Path(r"D:\Codex\临时\spine_js\out")
 
 TARGETS = [

@@ -52,7 +52,7 @@ RULES = [
     ("04_临时车间/版更", "版本更新/03_历史"),
     # 5 相对提示
     ("..\\版更\\" + PERIOD,
-     "D:\\Codex\\Nikke\\Nikke_Skills\\版本更新\\03_历史\\" + PERIOD),
+     "D:\\Codex\\Nikke\\02_工位\\10_数据管线\\版本更新\\03_历史\\" + PERIOD),
     # 6 裸目录名
     ("版更\\" + PERIOD, "版本更新\\03_历史\\" + PERIOD),
     ("版更/" + PERIOD, "版本更新/03_历史/" + PERIOD),
@@ -64,8 +64,8 @@ RULES = [
 ]
 
 ROOTS = [
-    r"D:\Codex\Nikke\Nikke_Skills\拆包\04_临时车间\脚本",
-    r"D:\Codex\Nikke\Nikke_Skills\版本更新",
+    r"D:\Codex\Nikke\01_母体\B_客户端资源\04_临时车间\脚本",
+    r"D:\Codex\Nikke\02_工位\10_数据管线\版本更新",
 ]
 SKIP = ("_归档_20260813_v1_技术版", "__pycache__", "06_回收站",
         # 本脚本自身：规则表里就写着旧路径，不能改自己

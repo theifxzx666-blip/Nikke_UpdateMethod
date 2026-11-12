@@ -42,7 +42,7 @@ Addressables catalog 是 JSON，`m_InternalIds` 里有完整 bundle 名。
 
 NAU 自动识别版本密钥（如 v14），输出 UnityFS 格式的 `_dec.bundle`。
 
-本机现成位置：`D:\Codex\Nikke\Nikke_Skills\拆包\NAU\`。
+本机现成位置：`D:\Codex\Nikke\01_母体\B_客户端资源\NAU\`。
 
 ## 四、导出：UnityPy 优先，AssetStudioCLI 兜底
 

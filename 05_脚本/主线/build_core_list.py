@@ -13,7 +13,7 @@ from UnityPy.helpers.MeshHelper import MeshHandler
 import render_monster_standee as R
 
 DEV = Path(r"D:/Codex/临时/nikke_intl_20261029/device")
-BASE = Path(r"D:/Codex/Nikke/Nikke_Skills/版本更新/03_历史/20260813_国际服/05_主线_47-48章/07_关卡莱彻")
+BASE = Path(r"D:/Codex/Nikke/02_工位/10_数据管线/版本更新/03_历史/20260813_国际服/05_主线_47-48章/07_关卡莱彻")
 
 ITEMS = [
     ("01", "指环", "xmg001"), ("02", "海马", "xma003"), ("03", "太阳", "xeg006"),

@@ -17,7 +17,7 @@ import os
 import sys
 from collections import defaultdict
 
-ROOT = r"D:\Codex\Nikke\Nikke_Skills\版本更新\03_历史\20260813_国际服"
+ROOT = r"D:\Codex\Nikke\02_工位\10_数据管线\版本更新\03_历史\20260813_国际服"
 SKIP_TOP = ("_构建", "06_角色大厅站立动画")
 MIN_SIZE = 50000
 

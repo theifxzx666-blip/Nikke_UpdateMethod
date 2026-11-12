@@ -26,7 +26,7 @@ from PIL import Image
 OUT = Path(r"D:\Codex\临时\nikke_intl_20261029\out")
 SPEC = OUT / "lw_spec.json"
 TEXD = OUT / "lw_tex"
-ART = Path(r"D:\Codex\Nikke\Nikke_Skills\版本更新\03_历史\20260813_国际服"
+ART = Path(r"D:\Codex\Nikke\02_工位\10_数据管线\版本更新\03_历史\20260813_国际服"
            r"\03_活动\PERSONA ON FRONTLINE（ce009）\大厅动画\大厅动画_主图_1000x1000.png")
 
 W = H = 1000

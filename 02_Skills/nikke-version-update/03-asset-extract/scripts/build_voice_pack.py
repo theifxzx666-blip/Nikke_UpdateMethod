@@ -28,7 +28,7 @@ ADB = r"D:\WorkBuddy\Supports\platform-tools\adb.exe"
 BASE = "/storage/emulated/0/Android/data/com.proximabeta.nikke/files/com.shiftup.patch"
 DEV = Path(r"D:\Codex\临时\nikke_intl_20261029\device")
 LSC = DEV / "lsc"
-DST = Path(r"D:\Codex\Nikke\Nikke_Skills\版本更新\03_历史\20260813_国际服\01_新角色")
+DST = Path(r"D:\Codex\Nikke\02_工位\10_数据管线\版本更新\03_历史\20260813_国际服\01_新角色")
 
 LANGS = [("ja", "日配")]   # en/ko 语音包在本机未下发（只有 catalog），只能取日配
 CIDS = ["c870", "c871", "c872"]

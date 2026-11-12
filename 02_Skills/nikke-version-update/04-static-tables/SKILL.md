@@ -74,7 +74,7 @@ python scripts\run.py --run all          # 按序跑，任一步失败就停
 `拆包/02_Skills/mpdump`（365 类型）能解 MemoryPack 序列化的静态表。
 
 ```bash
-cd "Nikke_Skills/拆包/02_Skills/mpdump"
+cd "01_母体/B_客户端资源/02_Skills/mpdump"
 # 先跑一次既有 Dump 确认能出 JSON，再决定要不要加类型
 ```
 

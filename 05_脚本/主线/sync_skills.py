@@ -16,6 +16,11 @@ SKILL.md 里写了 `python xxx.py`，但 `scripts\` 里没有这个文件 ——
 就一行都跑不起来。实测 6 个 Skill 共引用 16 个 .py，只有 6 个在目录内，缺 10 个。
 所以 --apply 前先体检，缺脚本的 Skill 直接拒绝同步，不静默放过。
 
+体检范围是 **SKILL.md + reference\*.md**。20261027 之前只扫 SKILL.md，
+结果 07-battle-scene 的 reference\assembly.md / charge.md 引用了脚本也查不出来 ——
+「没报错」被误当成「没问题」。现在两处都扫，但按上下文把 ChargeMap 这类
+**外部工具**的脚本归到 external（只提示、不阻断），不制造假警报。
+
 用法
 ----
   python sync_skills.py --check                 # 只比对，列漂移 + 列缺失脚本
@@ -54,9 +59,19 @@ DEFAULT_DST = Path(r"C:\Users\1E_6\.workbuddy\skills")
 # 声明、npm install 生成，不入库也不参与同步；否则每次 apply 都会把本地依赖删掉。
 SKIP_DIRS = {"__pycache__", ".git", ".idea", ".vscode", "node_modules", "vendor"}
 
-# 从 SKILL.md 提取 .py 文件名。只认反引号里或命令行里的裸文件名，
+# 从文档提取 .py 文件名。只认反引号里或命令行里的裸文件名，
 # 避免把 `mkdocs.py` 这种正文里的例子也算进来 —— 加前缀要求：必须是 word 边界上的 xxx.py
 PY_RE = re.compile(r"(?<![\w./\\-])([A-Za-z_][A-Za-z0-9_]*\.py)\b")
+
+# reference\ 里会引用**外部工具**的脚本做口径对照（实测：07-battle-scene 的
+# assembly.md 写「ChargeMap `build_assembly.py`」、charge.md 写「ChargeMap 的 `scan_px.py`」）。
+# 这些不该算「本 Skill 缺脚本」，否则每次体检都误报。
+# 判据只认**上下文限定词**，不认文件名长得像不像 —— 不猜。
+EXTERNAL_HINTS = ("ChargeMap", "外部", "官方发行", "vendor", "npm install")
+
+# 本项目主线脚本库。reference\ 里引用的脚本多半在这里（说明文档常写「完整实现见主线」）。
+# 只用于在报告里区分「引用主线脚本」和「哪儿都找不到、可能拼错」。
+MAINLINE_DIR = Path(r"D:\Codex\Nikke\Nikke_UpdateMethod\05_脚本\主线")
 
 
 def md5_of(path: Path) -> str:
@@ -94,23 +109,72 @@ def collect_skills(src: Path) -> dict:
     return found
 
 
-def check_self_sufficient(skill_dir: Path):
-    """自足性体检：SKILL.md 提到的 .py 是否都在 scripts\\ 下。
+def doc_files(skill_dir: Path):
+    """要扫的文档：SKILL.md + reference\\ 下所有 .md。
 
-    返回 (missing, orphan_hint)：
-      missing      = 提到但目录内没有的脚本名（排序后的 list）
-      orphan_hint  = scripts\\ 下存在但 SKILL.md 没提的脚本（不算错，仅提示）
+    只扫 SKILL.md 是原来『查不出问题』的根因 —— 实测 07-battle-scene 的
+    reference\\assembly.md、reference\\charge.md 各自引用了脚本，
+    而 SKILL.md 一个字都没提，于是体检一路绿灯。
     """
-    text = (skill_dir / "SKILL.md").read_text(encoding="utf-8", errors="replace")
+    yield skill_dir / "SKILL.md"
+    ref = skill_dir / "reference"
+    if ref.is_dir():
+        yield from sorted(ref.rglob("*.md"))
+
+
+def _scan_doc(doc: Path):
+    """从一份文档里抽出 (脚本名, 前 40 字符上下文) 列表。"""
+    text = doc.read_text(encoding="utf-8", errors="replace")
     # 先把 frontmatter 去掉，避免 description 里的字样被误算
     body = re.sub(r"^---\s*\n.*?\n---\s*\n", "", text, count=1, flags=re.S)
+    return [(m.group(1), body[max(0, m.start() - 40):m.start()])
+            for m in PY_RE.finditer(body)]
 
-    mentioned = set(PY_RE.findall(body))
+
+def check_self_sufficient(skill_dir: Path):
+    """自足性体检：**文档**提到的 .py 是否都在 scripts\\ 下。
+
+    扫 SKILL.md + reference\\*.md 两处，但**分档处理** —— 这两处的语义完全不同：
+
+      missing   = **SKILL.md**（运行入口）提到、scripts\\ 没有 → 真问题，阻断同步
+      external  = 只在 reference 提到，且上下文标明是外部工具（ChargeMap 等）→ 仅提示
+      ref_only  = 只在 reference 提到，其余情况 → 仅提示
+                  （说明文档常在「口径对照 / 完整实现见主线」处引用别的脚本。
+                   混进 missing 会让 8 个 Skill 里 3 个莫名被拒同步 —— 实测过。）
+      orphan    = scripts\\ 下有但文档没提 → 仅提示
+
+    返回 (missing, external, ref_only, orphan)。
+    """
     have = {p.name for p in (skill_dir / "scripts").glob("*.py")} if (skill_dir / "scripts").is_dir() else set()
 
-    missing = sorted(mentioned - have)
-    orphan = sorted(have - mentioned)
-    return missing, orphan
+    # name -> {"in_skill": 是否在运行入口被提到, "ctxs": [上下文...]}
+    info = {}
+    for doc in doc_files(skill_dir):
+        if not doc.exists():
+            continue
+        in_skill = (doc.parent == skill_dir and doc.name == "SKILL.md")
+        for name, ctx in _scan_doc(doc):
+            e = info.setdefault(name, {"in_skill": False, "ctxs": []})
+            e["in_skill"] = e["in_skill"] or in_skill
+            e["ctxs"].append(ctx)
+
+    missing, external, ref_only = [], [], []
+    for name, e in info.items():
+        if name in have:
+            continue
+        if e["in_skill"]:
+            missing.append(name)
+        elif any(h in c for c in e["ctxs"] for h in EXTERNAL_HINTS):
+            external.append(name)
+        else:
+            # 主线脚本库里有的，标一下出处；哪都没有的，标个醒目的记号
+            if MAINLINE_DIR.is_dir() and not (MAINLINE_DIR / name).exists():
+                ref_only.append(f"{name}!未找到")
+            else:
+                ref_only.append(name)
+
+    orphan = sorted(have - set(info))
+    return sorted(missing), sorted(external), ref_only, orphan
 
 
 def iter_files(root: Path):
@@ -156,14 +220,18 @@ def cmd_check(src: Path, dst: Path, verbose: bool) -> int:
 
     drift_total = 0
     bad_total = 0
+    ext_total = 0
+    ref_total = 0
 
     for name, sdir in skills.items():
         ddir = dst / name
-        missing_py, orphan_py = check_self_sufficient(sdir)
+        missing_py, external_py, refonly_py, orphan_py = check_self_sufficient(sdir)
         diff = compare_one(sdir, ddir)
 
         drift = len(diff["added"]) + len(diff["changed"]) + len(diff["missing"])
         drift_total += drift
+        ext_total += len(external_py)
+        ref_total += len(refonly_py)
         if missing_py:
             bad_total += 1
 
@@ -172,6 +240,10 @@ def cmd_check(src: Path, dst: Path, verbose: bool) -> int:
         if missing_py:
             print(f"         not self-sufficient, missing {len(missing_py)} script(s):")
             print(f"           {', '.join(missing_py)}")
+        if external_py:
+            print(f"         external refs (not counted): {', '.join(external_py)}")
+        if refonly_py and verbose:
+            print(f"         reference-only refs (not counted): {', '.join(refonly_py)}")
         if drift:
             print(f"         files need sync: "
                   f"added {len(diff['added'])} / changed {len(diff['changed'])} / "
@@ -187,7 +259,8 @@ def cmd_check(src: Path, dst: Path, verbose: bool) -> int:
                 print(f"           - {rel}")
 
     print(f"\nsummary: {len(skills)} skill(s), {drift_total} file(s) to sync, "
-          f"{bad_total} not self-sufficient")
+          f"{bad_total} not self-sufficient, {ext_total} external + "
+          f"{ref_total} reference-only ignored")
     return 0 if (drift_total == 0 and bad_total == 0) else 1
 
 
@@ -199,7 +272,7 @@ def cmd_apply(src: Path, dst: Path, force: bool) -> int:
 
     rc = 0
     for name, sdir in skills.items():
-        missing_py, _ = check_self_sufficient(sdir)
+        missing_py, _, _, _ = check_self_sufficient(sdir)
         if missing_py and not force:
             print(f"[skip] {name}: not self-sufficient, missing {len(missing_py)} script(s)")
             print(f"       {', '.join(missing_py)}")

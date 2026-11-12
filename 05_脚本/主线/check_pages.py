@@ -1,8 +1,13 @@
 # -*- coding: utf-8 -*-
 """把报告 HTML 里指定的几页单独抽出来截图，用来核对有没有溢出裁切。
 
-`.page` 是 height:266mm + overflow:hidden，内容超出会被静默裁掉，所以每改一次版式
-都要按 A4 实际打印区（184mm × 266mm = 696px × 1006px）逐页截图看一眼。
+`.page` 是 height:296.5mm + overflow:hidden，内容超出会被静默裁掉，所以每改一次版式
+都要逐页截图看一眼。
+
+截图尺寸按满出血口径算：`@page margin:0`，`.page` 就是 210 × 296.5 mm。
+CSS 的 mm 按 96dpi 换算 → 210mm = 794px，296.5mm = 1121px。
+（旧版式是 margin:13mm 13mm 14mm、内容区 184×266mm = 696×1006px，换版式时这里必须跟着改，
+否则截出来是缩放的，判断不了真实的裁切位置。）
 
 用法
 ----
@@ -19,9 +24,9 @@ import subprocess
 from pathlib import Path
 
 CHROME = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
-DEF_HTML = Path(r"D:\Codex\Nikke\Nikke_Skills\版本更新\03_历史\20260813_国际服\_构建\报告.html")
+DEF_HTML = Path(r"D:\Codex\Nikke\02_工位\10_数据管线\版本更新\03_历史\20260813_国际服\_构建\报告.html")
 DEF_OUT = Path(r"D:\Codex\临时\nikke_intl_20261029\out\pdfcheck2")
-W, H = 696, 1006
+W, H = 794, 1121   # 210mm × 296.5mm @96dpi（满出血，与 .page 一致）
 
 
 def main() -> None:

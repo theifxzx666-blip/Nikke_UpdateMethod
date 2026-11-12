@@ -22,7 +22,7 @@ import argparse, csv, hashlib, json, os, re, sys
 from collections import Counter, defaultdict
 
 # ---- 环境常量（跨期不变）------------------------------------------------
-BASE_KEYS = r"D:\Codex\Nikke\Nikke_Skills\拆包\00_资源库\版本节点\_干跑_20261025\00_基线_键清单"
+BASE_KEYS = r"D:\Codex\Nikke\01_母体\B_客户端资源\00_资源库\版本节点\_干跑_20261025\00_基线_键清单"
 CLIENT_VER = "152.8.7"          # 每期改：见 00_规范/技术选型.md 第零节
 SKIP_DIRS = {"_构建"}            # 中间件不算交付
 

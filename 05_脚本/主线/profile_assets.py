@@ -38,9 +38,9 @@ import sqlite3
 import sys
 from pathlib import Path
 
-DEFAULT_STATIC = Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\00_资源库\版本节点"
+DEFAULT_STATIC = Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\00_资源库\版本节点"
                       r"\_基线_20261029\00_基线_静态表\_mpdump全量")
-DEFAULT_BASE = Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\00_资源库\版本节点"
+DEFAULT_BASE = Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\00_资源库\版本节点"
                     r"\_基线_20261029\00_基线_对象名")
 
 FRAME_FAMS = [

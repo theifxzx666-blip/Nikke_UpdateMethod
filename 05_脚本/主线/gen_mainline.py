@@ -16,8 +16,8 @@ from collections import Counter
 from pathlib import Path
 
 LSC = Path(r"D:\Codex\临时\nikke_intl_20261029\device\lsc")
-OUT = Path(r"D:\Codex\Nikke\Nikke_Skills\版本更新\03_历史\20260813_国际服\05_主线_47-48章")
-SD = Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\02_Skills\mpdump\out")
+OUT = Path(r"D:\Codex\Nikke\02_工位\10_数据管线\版本更新\03_历史\20260813_国际服\05_主线_47-48章")
+SD = Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\02_Skills\mpdump\out")
 
 CHAPTERS = [(46, "候选参照"), (47, "本期新增"), (48, "本期新增")]
 

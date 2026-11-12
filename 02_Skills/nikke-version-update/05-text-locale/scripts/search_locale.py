@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 DIRS = [Path(r"D:\Codex\临时\nikke_intl_20261029\device\lsc"),
-        Path(r"D:\Codex\Nikke\Nikke_Skills\拆包\00_资源库\文本\原始文本库_lss"),
+        Path(r"D:\Codex\Nikke\01_母体\B_客户端资源\00_资源库\文本\原始文本库_lss"),
         Path(r"D:\Codex\临时\nikke_ce008")]
 
 terms = sys.argv[1:] or ["安尼希"]

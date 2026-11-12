@@ -4,7 +4,7 @@
 """
 import re, os, sys
 
-BASE_KEYS = r"D:\Codex\Nikke\Nikke_Skills\拆包\00_资源库\版本节点\_干跑_20261025\00_基线_键清单"
+BASE_KEYS = r"D:\Codex\Nikke\01_母体\B_客户端资源\00_资源库\版本节点\_干跑_20261025\00_基线_键清单"
 
 def load_index():
     """桶 -> [bundle 名]"""

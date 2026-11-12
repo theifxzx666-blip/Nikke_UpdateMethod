@@ -19,6 +19,7 @@
   python export_cutscene_gif.py --long 1200
 """
 import argparse
+import json
 import os
 import shutil
 import sys
@@ -46,7 +47,7 @@ JOBS = [
     # 开头 0~0.65s 两条都还没出场（渲染空帧），一并裁掉。
     {"id": "QUEEN（真）_c870", "asset": "c870_00_skillcut",
      "layers": ["idle", "skillcut_2", "skillcut_1"], "fit": 0, "q": 1.0,
-     "hide": "0",
+     "hide": "0", "autofit": 0.9,
      "start": 0.100, "dur": 4.333, "trim": 0.650, "note": "场景→卡面",
      "out": "c870_00_skillcut"},
     # 开头 0~0.95s 是卡面入场的极端缩放：卡片被压成一条白线/白方块，
@@ -61,6 +62,59 @@ JOBS = [
      "start": 0.100, "dur": 4.100, "trim": 0.0, "note": "骨骼演出",
      "out": "c872_00_skillcut"},
 ]
+
+
+def refine_by_pixels(cdp, b0, start, dur, q=0.9, n=16, probe_h=300):
+    """用「实际渲出来的像素」重新钉取景框，不信骨架自带的 getBounds。
+
+    骨架包围盒取的是**所有附件在所有帧的并集**。只要某一帧有个附件被放大到天上
+    （爆裂演出的特效层就这样，c870 的 skillcut_1 报 39675×34396），整个框就被撑飞，
+    主体在每一帧里都只占一小块。而真实画出来的内容只有 3005×3010。
+
+    做法：低分辨率渲 n 帧 → 逐帧量非背景像素的包围盒 → 取 q 分位 → setBounds 钉死。
+    用分位而不是并集，是为了让「角色最大出现时刚好铺满」，跟游戏里固定相机的观感一致
+    （角色飞远那段本来就该小，不能靠拉框把它放大回来）。
+    """
+    ar0 = b0["w"] / b0["h"]
+    cdp.ev(f"window.__spine.resize({max(40, round(probe_h * ar0))},{probe_h})")
+    boxes = []
+    for i in range(n):
+        t = start + (i + 0.5) / n * dur
+        cdp.ev(f"window.__spine.seek({t:.4f})")
+        r = cdp.ev("JSON.stringify(window.__spine.probePixels(30))")
+        if r and r != "null":
+            boxes.append(json.loads(r)["world"])
+    if len(boxes) < 4:
+        print(f"  !! 像素探测只拿到 {len(boxes)} 帧，沿用骨架框")
+        cdp.ev(f"window.__spine.resize({max(40, round(probe_h * ar0))},{probe_h})")
+        return b0
+
+    def qv(vals, p):
+        a = sorted(vals)
+        return a[min(len(a) - 1, max(0, round(p * (len(a) - 1))))]
+
+    lo, hi = (1 - q) / 2, 1 - (1 - q) / 2
+    x0 = qv([x["cx"] - x["w"] / 2 for x in boxes], lo)
+    x1 = qv([x["cx"] + x["w"] / 2 for x in boxes], hi)
+    y0 = qv([x["cy"] - x["h"] / 2 for x in boxes], lo)
+    y1 = qv([x["cy"] + x["h"] / 2 for x in boxes], hi)
+    nb = {"cx": (x0 + x1) / 2, "cy": (y0 + y1) / 2, "w": x1 - x0, "h": y1 - y0}
+    if not (nb["w"] > 0 and nb["h"] > 0):
+        print("  !! 像素框退化，沿用骨架框")
+        return b0
+    # 只在「确实变小」时采用；变大说明骨架框本来就贴，别把它撑开
+    rw = nb["w"] / b0["w"]
+    rh = nb["h"] / b0["h"]
+    cov = [f"{x['w'] / b0['w'] * 100:.0f}%" for x in boxes]     # 只作参考
+    if rw > 0.995 or rh > 0.995:
+        print(f"  取景：骨架框已贴合（像素 {rw*100:.0f}%×{rh*100:.0f}%），不改")
+        cdp.ev(f"window.__spine.resize({max(40, round(probe_h * ar0))},{probe_h})")
+        return b0
+    cdp.ev(f"window.__spine.setBounds({json.dumps(nb)})")
+    print(f"  取景：骨架框 {b0['w']:.0f}×{b0['h']:.0f} → 像素框 "
+          f"{nb['w']:.0f}×{nb['h']:.0f}"
+          f"（{rw*100:.0f}%×{rh*100:.0f}%，画面放大约 {1/max(rw, rh):.2f}×）")
+    return nb
 
 
 def save_gif_durs(frames, path, durs, colors=256):
@@ -133,6 +187,12 @@ def main():
                 print(f"  !! trim 过大（{trim}s），跳过")
                 continue
             b = cdp.ev("window.__spine.measure(12)")
+            # 骨架 getBounds 给的框会被「某一个附件在某一帧被放大到天上」撑飞：
+            # c870 的 skillcut_1 报 39675×34396，但实际画出来的内容只有 3005×3010，
+            # 结果是**每一帧都恒定只占画面 63%×65%**，人物被均匀压小 —— 这就是
+            # 「爆裂还原得差、人物缩得很小」的直接来源。改成渲一遍再看像素在哪。
+            if j.get("autofit"):
+                b = refine_by_pixels(cdp, b, start, dur, j["autofit"])
             ar = b["w"] / b["h"]
             css_h = max(60, round(a.long / 2))
             css_w = max(40, round(css_h * ar))
@@ -156,9 +216,14 @@ def main():
             gif = os.path.join(OUT_GIF, f"{j['out']}.gif")
             # 先验原始渲染帧的覆盖率，再验写出的 GIF：
             # 两者不一致就说明是 GIF 调色板/合并的问题，不是渲染的问题。
+            #
+            # 覆盖率的口径是「离背景色多远」，不是「亮度和多高」。
+            # 早先用亮度阈值 (>60) 判，黑衣角色几乎全被算成空 —— c871 明明满幅
+            # 跳舞的那一帧只报 23%，结果首帧 PNG 挑中了最暗的一帧。
             import numpy as np
-            cov_raw = [float((np.abs(np.asarray(f, dtype="int16")).sum(axis=2) > 60).mean() * 100)
-                       for f in frames]
+            BG_PX = np.array([14, 17, 22], dtype="int16")
+            cov_raw = [float((np.abs(np.asarray(f.convert("RGB"), dtype="int16") - BG_PX)
+                              .sum(axis=2) > 30).mean() * 100) for f in frames]
             empty_raw = [i for i, c in enumerate(cov_raw) if c < 0.5]
 
             # 空格帧并进相邻帧：多层叠加时偶发整帧渲染不出来（c871 出现过 3 帧），
